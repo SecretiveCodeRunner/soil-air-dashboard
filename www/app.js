@@ -1,4 +1,4 @@
-// Dual Air & Soil Telemetry Studio Engine (v2.2 with Dynamic Heartbeat & Power Gap Detection)
+// Dual Air & Soil Telemetry Studio Engine (v2.3 - Stock Chart & Resilient Offline History Mode)
 
 const FIREBASE_BASE_URL = "https://esp32-soil-and-air-default-rtdb.asia-southeast1.firebasedatabase.app/";
 const FIREBASE_API_KEY = "AIzaSyD-E7fj6XtqIysg1MDztO2AfuaBV9an4fY";
@@ -111,6 +111,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initNavigation();
   initCharts();
   initTimelineControls();
+  
+  // Immediately poll Firebase to populate metrics, stock charts, & history
   startFirebasePolling();
 
   if (elBtnExport) elBtnExport.addEventListener("click", exportFilteredCsvLog);
@@ -167,30 +169,29 @@ function initTimelineControls() {
 
 function applyTimeFilter() {
   if (rawTelemetryHistory.length === 0) {
-    filteredHistory = [];
     updateDashboardUI();
     return;
   }
 
-  const now = new Date().getTime();
+  const now = Date.now();
   let cutoffMs = 0;
   let summaryText = "";
 
   if (activeRangeMode === "15m") {
     cutoffMs = now - (15 * 60 * 1000);
-    summaryText = "Showing Realtime telemetry (Last 15 Min)";
+    summaryText = "Realtime telemetry (Last 15 Min)";
   } else if (activeRangeMode === "1h") {
     cutoffMs = now - (1 * 60 * 60 * 1000);
-    summaryText = "Showing last 1 hour of telemetry";
+    summaryText = "Last 1 hour of telemetry";
   } else if (activeRangeMode === "24h") {
     cutoffMs = now - (24 * 60 * 60 * 1000);
-    summaryText = "Showing last 24 hours of telemetry";
+    summaryText = "Last 24 hours of telemetry";
   } else if (activeRangeMode === "7d") {
     cutoffMs = now - (7 * 24 * 60 * 60 * 1000);
-    summaryText = "Showing last 7 days of telemetry";
+    summaryText = "Last 7 days of telemetry";
   } else if (activeRangeMode === "all") {
     cutoffMs = 0;
-    summaryText = `Showing full log (${rawTelemetryHistory.length} total entries)`;
+    summaryText = `Full history log (${rawTelemetryHistory.length} entries)`;
   } else if (activeRangeMode === "custom") {
     const fromTime = elDateFrom.value ? new Date(elDateFrom.value).getTime() : 0;
     const toTime = elDateTo.value ? new Date(elDateTo.value).getTime() : Infinity;
@@ -211,10 +212,11 @@ function applyTimeFilter() {
     return tMs >= cutoffMs;
   });
 
-  // Fallback if filter result is empty but raw data exists
+  // STOCK CHART / RESILIENT FALLBACK: If filtered history in the last X hours is empty because ESP32 was off,
+  // NEVER show a blank screen! Fallback to showing the latest historical records available in Firebase!
   if (filteredHistory.length === 0 && rawTelemetryHistory.length > 0) {
     filteredHistory = rawTelemetryHistory.slice(-50);
-    summaryText += " (Showing latest 50 samples)";
+    summaryText += ` (Showing latest ${filteredHistory.length} historical logs)`;
   }
 
   if (elFilterSummaryText) elFilterSummaryText.textContent = summaryText;
@@ -240,36 +242,44 @@ function parseRecordTimestampMs(r) {
 function checkEspHeartbeatStatus(latestRecord) {
   if (!latestRecord) {
     setConnectionState("offline", "ESP32 Offline (No Data)");
-    updateHeartbeatUI(false, "DISCONNECTED", "No Data Received", "badge-err");
+    updateHeartbeatUI(false, "DISCONNECTED", "No Data", "badge-err");
     return;
   }
 
   const recordTimeMs = parseRecordTimestampMs(latestRecord);
   const nowMs = Date.now();
 
-  // If time is missing or invalid, assume live
+  let timeString = latestRecord.Time || "";
+  if (!timeString && latestRecord.Timestamp) {
+    const parts = latestRecord.Timestamp.split("T");
+    if (parts.length > 1) timeString = parts[1].replace("Z", "");
+  }
+
   if (recordTimeMs === 0) {
-    setConnectionState("online", "ESP32 Live Stream");
-    updateHeartbeatUI(true, "ACTIVE (Transmitting)", "Just now", "badge-optimal");
+    setConnectionState("online", "ESP32 Stream Active");
+    updateHeartbeatUI(true, "ACTIVE", timeString || "Just now", "badge-optimal");
     return;
   }
 
   const ageSec = Math.floor((nowMs - recordTimeMs) / 1000);
   const ageMin = Math.floor(ageSec / 60);
+  const ageHours = Math.floor(ageMin / 60);
 
   if (ageSec < 35) {
     // 🟢 ONLINE & POWERED ON
     setConnectionState("online", "ESP32 Live Stream Online");
-    updateHeartbeatUI(true, "ACTIVE (Transmitting)", `${ageSec}s ago`, "badge-optimal");
+    updateHeartbeatUI(true, "ACTIVE (Transmitting)", `Just now (${timeString})`, "badge-optimal");
   } else if (ageSec < 300) {
     // 🟡 STALE STREAM (Idle / Delayed)
-    setConnectionState("stale", `Stream Idle (Last seen ${ageSec}s ago)`);
-    updateHeartbeatUI(false, `STALE (${ageSec}s delay)`, `${ageSec}s ago`, "badge-stale");
+    setConnectionState("stale", `Idle • Last logged at ${timeString} (${ageSec}s ago)`);
+    updateHeartbeatUI(false, `STALE (${ageSec}s delay)`, `Last logged: ${timeString}`, "badge-stale");
   } else {
     // 🔴 POWERED OFF / DISCONNECTED
-    const displayAge = ageMin < 60 ? `${ageMin} min ago` : `${Math.floor(ageMin / 60)}h ago`;
-    setConnectionState("offline", `ESP32 Power Off (Last seen ${displayAge})`);
-    updateHeartbeatUI(false, `POWERED OFF (${displayAge})`, displayAge, "badge-err");
+    let agoText = ageMin < 60 ? `${ageMin}m ago` : `${ageHours}h ${ageMin % 60}m ago`;
+    const lastTimeDisplay = timeString ? `${timeString} (${agoText})` : agoText;
+    
+    setConnectionState("offline", `Offline • Last logged at ${lastTimeDisplay}`);
+    updateHeartbeatUI(false, `POWERED OFF (Last logged ${timeString || agoText})`, `Last logged: ${lastTimeDisplay}`, "badge-err");
   }
 }
 
@@ -338,7 +348,7 @@ function initCharts() {
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    spanGaps: false, // CRITICAL: Breaks line graph when null gap values are inserted!
+    spanGaps: false, // Breaks line graph during power-off gaps
     animation: { duration: 300 },
     scales: {
       x: {
@@ -355,7 +365,7 @@ function initCharts() {
     }
   };
 
-  // 1. Temperature Comparison (BME280 vs AHT20 vs DS18B20 Soil)
+  // 1. Temperature Comparison
   const ctxTemp = document.getElementById("temperatureChart").getContext("2d");
   temperatureChart = new Chart(ctxTemp, {
     type: "line",
@@ -397,7 +407,7 @@ function initCharts() {
     options: chartOptions
   });
 
-  // 2. Air Humidity Comparison (BME280 vs AHT20)
+  // 2. Humidity Comparison
   const ctxHum = document.getElementById("humidityChart").getContext("2d");
   humidityChart = new Chart(ctxHum, {
     type: "line",
@@ -429,7 +439,7 @@ function initCharts() {
     options: chartOptions
   });
 
-  // 3. Soil Moisture Comparison (Capacitive vs Resistive)
+  // 3. Soil Moisture Comparison
   const ctxSoil = document.getElementById("soilMoistureChart").getContext("2d");
   soilMoistureChart = new Chart(ctxSoil, {
     type: "line",
@@ -463,7 +473,7 @@ function initCharts() {
 }
 
 // ============================================================================
-// FIREBASE POLLING
+// RESILIENT FIREBASE POLLING ENGINE
 // ============================================================================
 async function startFirebasePolling() {
   fetchTelemetryData();
@@ -508,7 +518,12 @@ async function fetchTelemetryData() {
       fetchAhtFallbackData();
     }
   } catch (err) {
-    setConnectionState("offline", "Connecting to ESP32 Stream...");
+    // If network fails, do NOT wipe UI! Maintain existing history array and update heartbeat
+    if (rawTelemetryHistory.length > 0) {
+      applyTimeFilter();
+    } else {
+      fetchAhtFallbackData();
+    }
   }
 }
 
@@ -541,16 +556,23 @@ async function fetchAhtFallbackData() {
     }
   } catch (e) {}
 
-  setConnectionState("offline", "Offline (Click Sim Icon to Test)");
+  // If no network and no history, show demo fallback message but don't freeze
+  if (rawTelemetryHistory.length > 0) {
+    applyTimeFilter();
+  } else {
+    setConnectionState("offline", "Offline (Click Sim Icon to Test)");
+  }
 }
 
 // ============================================================================
-// UI UPDATES & POWER-OFF GAP INJECTION
+// UI UPDATES & STOCK CHART TIME GAP PLOTTING
 // ============================================================================
 function updateDashboardUI() {
-  if (filteredHistory.length === 0) return;
+  if (rawTelemetryHistory.length === 0) return;
 
-  const latest = filteredHistory[filteredHistory.length - 1];
+  // Use latest historical record available
+  const displayHistory = filteredHistory.length > 0 ? filteredHistory : rawTelemetryHistory;
+  const latest = displayHistory[displayHistory.length - 1];
 
   // Dynamic ESP32 Active Power & Heartbeat Staleness Check
   checkEspHeartbeatStatus(latest);
@@ -560,7 +582,7 @@ function updateDashboardUI() {
     updateSdHealthBadge(latest.SD_Card_Status);
   }
 
-  // 1. Update Metrics
+  // 1. Update Metrics (Displays LAST KNOWN DATA from history)
   const bmeTemp = latest.BME_AirTemp_C ?? latest.AirTemp_C;
   const ahtTemp = latest.AHT_AirTemp_C ?? latest.AirTemp_C;
   const bmeHum = latest.BME_AirHumidity_Pct ?? latest.AirHumidity_Pct;
@@ -577,20 +599,20 @@ function updateDashboardUI() {
   if (elResRaw) elResRaw.textContent = latest.ResMoisture_Raw ?? "--";
   if (elBmePress) elBmePress.innerHTML = `${formatNum(latest.BME_AirPressure_hPa ?? latest.AirPressure_hPa, 1)} <span class="unit">hPa</span>`;
 
-  // 2. Update Waveform Charts with Inactive Gap Injection
-  updateCharts(filteredHistory);
+  // 2. Update Waveform Stock Charts with Power-Off Gap Injection up to CURRENT TIME
+  updateCharts(displayHistory);
 
   // 3. Update Full History Table
-  updateTable(filteredHistory);
+  updateTable(displayHistory);
 
-  if (elRecordsCount) elRecordsCount.textContent = `${filteredHistory.length} Records in Selected Timeline Range (${rawTelemetryHistory.length} Total)`;
+  if (elRecordsCount) elRecordsCount.textContent = `${displayHistory.length} Records Loaded (${rawTelemetryHistory.length} Total)`;
   if (elLastUpdate) elLastUpdate.textContent = `Last record: ${latest.Time || latest.Timestamp || new Date().toLocaleTimeString()}`;
 }
 
 function updateCharts(records) {
   if (!records || records.length === 0) return;
 
-  // Downsample to max 120 points on chart for ultra-smooth 60fps rendering
+  // Downsample to max 120 points for smooth rendering
   const maxChartPoints = 120;
   const step = Math.max(1, Math.floor(records.length / maxChartPoints));
   const sampledRecords = records.filter((_, idx) => idx % step === 0);
@@ -607,12 +629,12 @@ function updateCharts(records) {
   const resMoistData = [];
 
   let prevMs = 0;
-  const maxGapMs = 90000; // 90 Seconds Gap threshold = ESP32 Power Off / Disconnection!
+  const maxGapMs = 90000; // 90 Seconds Gap threshold = ESP32 Power Off / Disconnection
 
-  sampledRecords.forEach((r, idx) => {
+  sampledRecords.forEach((r) => {
     const currentMs = parseRecordTimestampMs(r);
 
-    // GAP DETECTION: If gap between logs > 90 seconds, insert null gap to break line chart!
+    // GAP DETECTION: If gap between consecutive logs > 90s, insert null gap to break line chart!
     if (prevMs > 0 && currentMs > 0 && (currentMs - prevMs > maxGapMs)) {
       labels.push("OFFLINE GAP");
       bmeTempData.push(null);
@@ -648,6 +670,26 @@ function updateCharts(records) {
     resMoistData.push(r.ResMoisture_Pct ?? null);
   });
 
+  // STOCK CHART MODE: If the last logged record is older than 60 seconds (ESP32 is off),
+  // extend the x-axis to CURRENT TIME ("Now") with null values so the chart shows the offline gap!
+  const lastRecordMs = prevMs;
+  const nowMs = Date.now();
+  if (lastRecordMs > 0 && (nowMs - lastRecordMs > 60000)) {
+    const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    labels.push("OFFLINE GAP");
+    labels.push(`Now (${nowTimeStr})`);
+
+    bmeTempData.push(null); bmeTempData.push(null);
+    ahtTempData.push(null); ahtTempData.push(null);
+    soilTempData.push(null); soilTempData.push(null);
+
+    bmeHumData.push(null); bmeHumData.push(null);
+    ahtHumData.push(null); ahtHumData.push(null);
+
+    capMoistData.push(null); capMoistData.push(null);
+    resMoistData.push(null); resMoistData.push(null);
+  }
+
   // 1. Temperature Chart
   if (temperatureChart) {
     temperatureChart.data.labels = labels;
@@ -678,7 +720,7 @@ function updateTable(records) {
   if (!elTableBody) return;
   elTableBody.innerHTML = "";
 
-  // Show all records in filtered range (up to 100 entries reversed)
+  // Show all records in history (up to 100 entries reversed)
   const reversed = [...records].reverse().slice(0, 100);
 
   reversed.forEach(r => {
@@ -707,8 +749,9 @@ function formatNum(val, decimals = 1) {
 // FILTERED CSV EXPORT ENGINE
 // ============================================================================
 function exportFilteredCsvLog() {
-  if (filteredHistory.length === 0) {
-    alert("No telemetry records in the selected timeline range to export.");
+  const exportData = filteredHistory.length > 0 ? filteredHistory : rawTelemetryHistory;
+  if (exportData.length === 0) {
+    alert("No telemetry records available to export.");
     return;
   }
 
@@ -720,7 +763,7 @@ function exportFilteredCsvLog() {
 
   let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
 
-  filteredHistory.forEach(r => {
+  exportData.forEach(r => {
     const row = [
       r.Timestamp || "",
       r.Date || "",
