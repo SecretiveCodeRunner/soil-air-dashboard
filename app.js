@@ -1,4 +1,4 @@
-// Dual Air & Soil Telemetry Studio Engine (v2.5 - CSV Range Selector Modal & Blob Exporter)
+// Dual Air & Soil Telemetry Studio Engine (v2.6 - Native Android Filesystem & Share Intent Edition)
 
 const FIREBASE_BASE_URL = "https://esp32-soil-and-air-default-rtdb.asia-southeast1.firebasedatabase.app/";
 const FIREBASE_API_KEY = "AIzaSyD-E7fj6XtqIysg1MDztO2AfuaBV9an4fY";
@@ -155,7 +155,6 @@ function initNavigation() {
 // CSV EXPORT MODAL & RANGE SELECTION CONTROLS
 // ============================================================================
 function initCsvModalControls() {
-  // Attach listeners to all CSV export buttons (History Tab, FAB, etc.)
   const openModalButtons = document.querySelectorAll(".btn-open-csv-modal");
   openModalButtons.forEach(btn => {
     btn.addEventListener("click", openCsvExportModal);
@@ -164,7 +163,6 @@ function initCsvModalControls() {
   if (elBtnCloseCsvModal) elBtnCloseCsvModal.addEventListener("click", closeCsvExportModal);
   if (elBtnCancelCsv) elBtnCancelCsv.addEventListener("click", closeCsvExportModal);
 
-  // Radio range selection listener
   const radioInputs = document.querySelectorAll('input[name="export-range"]');
   radioInputs.forEach(radio => {
     radio.addEventListener("change", (e) => {
@@ -224,7 +222,7 @@ function executeSelectedCsvDownload() {
     });
   }
 
-  // Fallback to all raw history if range returned empty
+  // Fallback to raw history if range returned empty
   if (exportData.length === 0 && rawTelemetryHistory.length > 0) {
     exportData = rawTelemetryHistory;
   }
@@ -234,7 +232,7 @@ function executeSelectedCsvDownload() {
     return;
   }
 
-  // Generate CSV text
+  // Generate CSV string
   const headers = [
     "Timestamp", "Date", "Time", "BME_AirTemp_C", "AHT_AirTemp_C", "SoilTemp_C",
     "BME_AirHumidity_Pct", "AHT_AirHumidity_Pct", "BME_AirPressure_hPa",
@@ -267,27 +265,109 @@ function executeSelectedCsvDownload() {
   const csvString = csvRows.join("\n");
   const fileName = `soil_air_telemetry_${new Date().toISOString().slice(0,10)}_${chosenRange}.csv`;
 
-  // Trigger download using Blob & Object URL for 100% Android WebView & Browser compatibility
-  triggerBlobCsvDownload(csvString, fileName);
   closeCsvExportModal();
+
+  // Multi-Engine Native Android & Mobile File Exporter
+  triggerMultiEngineCsvDownload(csvString, fileName);
 }
 
-function triggerBlobCsvDownload(csvString, fileName) {
+// MULTI-ENGINE CSV DOWNLOADER (Capacitor Native Filesystem -> Web Share API -> Blob URL -> Clipboard Copy Fallback)
+async function triggerMultiEngineCsvDownload(csvString, fileName) {
+  // 1. Native Android Capacitor Filesystem & Native Share Sheet Intent
+  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    try {
+      const Filesystem = window.Capacitor.Plugins.Filesystem;
+      const Share = window.Capacitor.Plugins.Share;
+
+      if (Filesystem) {
+        const writeResult = await Filesystem.writeFile({
+          path: fileName,
+          data: csvString,
+          directory: 'CACHE',
+          encoding: 'utf8'
+        });
+
+        if (Share && writeResult && writeResult.uri) {
+          await Share.share({
+            title: "Soil & Air Telemetry CSV",
+            text: `Exported telemetry log (${fileName})`,
+            url: writeResult.uri,
+            dialogTitle: "Save CSV File or Share via App"
+          });
+          return;
+        }
+      }
+    } catch (nativeErr) {
+      console.warn("Capacitor Native File Export Error:", nativeErr);
+    }
+  }
+
+  // 2. Mobile Web Share API Fallback
+  if (navigator.canShare && typeof File !== "undefined") {
+    try {
+      const file = new File([csvString], fileName, { type: "text/csv" });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: "Soil & Air Telemetry CSV",
+          files: [file]
+        });
+        return;
+      }
+    } catch (shareErr) {
+      console.warn("Web Share API fallback to Blob download:", shareErr);
+    }
+  }
+
+  // 3. Standard Browser Blob Download
   try {
     const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
     const blobUrl = URL.createObjectURL(blob);
-    
     const link = document.createElement("a");
     link.href = blobUrl;
     link.setAttribute("download", fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 2500);
   } catch (err) {
     console.error("Blob Download Error:", err);
-    alert("Could not trigger download. Please check browser permissions.");
+    showCsvTextCopyModal(csvString, fileName);
+  }
+}
+
+function showCsvTextCopyModal(csvString, fileName) {
+  const modal = document.getElementById("csv-copy-modal");
+  const textarea = document.getElementById("csv-text-area");
+  const btnCopy = document.getElementById("btn-copy-csv-text");
+  const btnClose = document.getElementById("btn-close-copy-modal");
+  const btnCancel = document.getElementById("btn-cancel-copy");
+
+  if (textarea) textarea.value = csvString;
+  if (modal) modal.classList.remove("hidden");
+
+  const closeModal = () => {
+    if (modal) modal.classList.add("hidden");
+  };
+
+  if (btnClose) btnClose.onclick = closeModal;
+  if (btnCancel) btnCancel.onclick = closeModal;
+
+  if (btnCopy) {
+    btnCopy.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(csvString);
+        btnCopy.innerHTML = `<i class="fa-solid fa-check"></i> Copied to Clipboard!`;
+        setTimeout(() => {
+          btnCopy.innerHTML = `<i class="fa-solid fa-clipboard"></i> 1-Tap Copy CSV`;
+          closeModal();
+        }, 1500);
+      } catch (e) {
+        textarea.select();
+        document.execCommand("copy");
+        alert("CSV data copied to clipboard!");
+        closeModal();
+      }
+    };
   }
 }
 
@@ -725,19 +805,15 @@ async function fetchAhtFallbackData() {
 function updateDashboardUI() {
   if (rawTelemetryHistory.length === 0) return;
 
-  // Use latest historical record available
   const displayHistory = filteredHistory.length > 0 ? filteredHistory : rawTelemetryHistory;
   const latest = displayHistory[displayHistory.length - 1];
 
-  // Dynamic ESP32 Active Power & Heartbeat Staleness Check
   checkEspHeartbeatStatus(latest);
 
-  // Update SD Health Status
   if (latest.SD_Card_Status) {
     updateSdHealthBadge(latest.SD_Card_Status);
   }
 
-  // 1. Update Metrics (Displays LAST KNOWN DATA from history)
   const bmeTemp = latest.BME_AirTemp_C ?? latest.AirTemp_C;
   const ahtTemp = latest.AHT_AirTemp_C ?? latest.AirTemp_C;
   const bmeHum = latest.BME_AirHumidity_Pct ?? latest.AirHumidity_Pct;
@@ -754,10 +830,7 @@ function updateDashboardUI() {
   if (elResRaw) elResRaw.textContent = latest.ResMoisture_Raw ?? "--";
   if (elBmePress) elBmePress.innerHTML = `${formatNum(latest.BME_AirPressure_hPa ?? latest.AirPressure_hPa, 1)} <span class="unit">hPa</span>`;
 
-  // 2. Update Waveform Stock Charts with Power-Off Gap Injection up to CURRENT TIME
   updateCharts(displayHistory);
-
-  // 3. Update Full History Table
   updateTable(displayHistory);
 
   if (elRecordsCount) elRecordsCount.textContent = `${displayHistory.length} Records Loaded (${rawTelemetryHistory.length} Total)`;
@@ -767,7 +840,6 @@ function updateDashboardUI() {
 function updateCharts(records) {
   if (!records || records.length === 0) return;
 
-  // Downsample to max 120 points for smooth rendering
   const maxChartPoints = 120;
   const step = Math.max(1, Math.floor(records.length / maxChartPoints));
   const sampledRecords = records.filter((_, idx) => idx % step === 0);
@@ -784,12 +856,11 @@ function updateCharts(records) {
   const resMoistData = [];
 
   let prevMs = 0;
-  const maxGapMs = 90000; // 90 Seconds Gap threshold = ESP32 Power Off / Disconnection
+  const maxGapMs = 90000;
 
   sampledRecords.forEach((r) => {
     const currentMs = parseRecordTimestampMs(r);
 
-    // GAP DETECTION: If gap between consecutive logs > 90s, insert null gap to break line chart!
     if (prevMs > 0 && currentMs > 0 && (currentMs - prevMs > maxGapMs)) {
       labels.push("OFFLINE GAP");
       bmeTempData.push(null);
@@ -825,8 +896,6 @@ function updateCharts(records) {
     resMoistData.push(r.ResMoisture_Pct ?? null);
   });
 
-  // STOCK CHART MODE: If the last logged record is older than 60 seconds (ESP32 is off),
-  // extend the x-axis to CURRENT TIME ("Now") with null values so the chart shows the offline gap!
   const lastRecordMs = prevMs;
   const nowMs = Date.now();
   if (lastRecordMs > 0 && (nowMs - lastRecordMs > 60000)) {
@@ -845,7 +914,6 @@ function updateCharts(records) {
     resMoistData.push(null); resMoistData.push(null);
   }
 
-  // 1. Temperature Chart
   if (temperatureChart) {
     temperatureChart.data.labels = labels;
     temperatureChart.data.datasets[0].data = bmeTempData;
@@ -854,7 +922,6 @@ function updateCharts(records) {
     temperatureChart.update();
   }
 
-  // 2. Humidity Chart
   if (humidityChart) {
     humidityChart.data.labels = labels;
     humidityChart.data.datasets[0].data = bmeHumData;
@@ -862,7 +929,6 @@ function updateCharts(records) {
     humidityChart.update();
   }
 
-  // 3. Soil Moisture Chart
   if (soilMoistureChart) {
     soilMoistureChart.data.labels = labels;
     soilMoistureChart.data.datasets[0].data = capMoistData;
@@ -875,7 +941,6 @@ function updateTable(records) {
   if (!elTableBody) return;
   elTableBody.innerHTML = "";
 
-  // Show all records in history (up to 100 entries reversed)
   const reversed = [...records].reverse().slice(0, 100);
 
   reversed.forEach(r => {
@@ -927,7 +992,7 @@ function toggleDemoSimulation() {
 
   for (let i = 40; i >= 0; i--) {
     let offsetSec = i * 10;
-    if (i > 20) offsetSec += 900; // Simulated 15-minute power off gap!
+    if (i > 20) offsetSec += 900;
     const t = new Date(now.getTime() - offsetSec * 1000);
     demoRecords.push(generateSampleRecord(t));
   }

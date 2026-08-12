@@ -398,6 +398,24 @@
     </div>
   </div>
 
+  <!-- CSV TEXT COPY FALLBACK MODAL -->
+  <div class="modal-overlay hidden" id="csv-copy-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-copy color-cap"></i> Copy CSV Telemetry Data</h3>
+        <button class="modal-close" id="btn-close-copy-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <label class="modal-label">Your CSV Data is Ready Below:</label>
+        <textarea id="csv-text-area" class="csv-textarea" readonly></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-cancel-copy">Close</button>
+        <button class="btn btn-primary" id="btn-copy-csv-text"><i class="fa-solid fa-clipboard"></i> 1-Tap Copy CSV</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

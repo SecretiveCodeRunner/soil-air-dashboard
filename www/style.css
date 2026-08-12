@@ -804,6 +804,20 @@ td {
   gap: 10px;
 }
 
+.csv-textarea {
+  width: 100%;
+  height: 180px;
+  background: rgba(11, 15, 25, 0.9);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  color: #38ef7d;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 10px;
+  resize: vertical;
+  outline: none;
+}
+
 /* RESPONSIVE DESKTOP ADJUSTMENTS */
 @media (min-width: 768px) {
   .metrics-row {
