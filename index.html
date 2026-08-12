@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dual Air & Soil Telemetry Studio</title>
+  
+  <!-- Google Fonts & Font Awesome Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Chart.js for Live Waveforms -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- HEADER NAVBAR -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="logo-icon">
+          <i class="fa-solid fa-seedling"></i>
+        </div>
+        <div class="brand-text">
+          <h1>Dual Air & Soil Telemetry Studio</h1>
+          <span class="subtitle">BME280 + AHT20 + DS18B20 + Moisture Sensors • ESP32 + Firebase</span>
+        </div>
+      </div>
+
+      <div class="status-actions">
+        <div class="connection-badge" id="connection-status">
+          <span class="pulse-dot"></span>
+          <span id="status-text">Connecting to Firebase...</span>
+        </div>
+
+        <button class="btn btn-demo" id="btn-demo-data" title="Inject simulated live readings for testing">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> Sim Telemetry
+        </button>
+
+        <button class="btn btn-primary" id="btn-export-csv">
+          <i class="fa-solid fa-file-arrow-down"></i> Export Filtered CSV
+        </button>
+      </div>
+    </header>
+
+    <!-- TIMELINE & DATE FILTER TOOLBAR -->
+    <section class="filter-toolbar">
+      <div class="filter-group">
+        <label for="time-range-select"><i class="fa-solid fa-clock-rotate-left"></i> Timeline Range:</label>
+        <select id="time-range-select" class="custom-select">
+          <option value="1h">Last 1 Hour</option>
+          <option value="24h" selected>Last 24 Hours</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="all">All History (Full Log)</option>
+          <option value="custom">Custom Date Range...</option>
+        </select>
+      </div>
+
+      <div class="custom-date-group hidden" id="custom-date-container">
+        <div class="input-wrapper">
+          <label>From:</label>
+          <input type="datetime-local" id="date-from" class="date-input">
+        </div>
+        <div class="input-wrapper">
+          <label>To:</label>
+          <input type="datetime-local" id="date-to" class="date-input">
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btn-apply-custom-date">Apply</button>
+      </div>
+
+      <div class="filter-summary" id="filter-summary-text">
+        Showing last 24 hours of telemetry
+      </div>
+    </section>
+
+    <!-- MAIN DASHBOARD CONTENT -->
+    <main class="dashboard-grid">
+
+      <!-- TOP METRIC TELEMETRY CARDS -->
+      <section class="metrics-row">
+        <!-- BME280 Air Temp -->
+        <div class="metric-card">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-temperature-half color-bme"></i> BME280 Air Temp</span>
+            <span class="badge badge-normal" id="bme-temp-status">Normal</span>
+          </div>
+          <div class="metric-body">
+            <div class="metric-value" id="val-bme-temp">-- <span class="unit">°C</span></div>
+            <div class="metric-spark">BME280 Sensor (I2C 0x76/0x77)</div>
+          </div>
+        </div>
+
+        <!-- AHT20 Air Temp -->
+        <div class="metric-card">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-temperature-low color-aht"></i> AHT20 Air Temp</span>
+            <span class="badge badge-normal" id="aht-temp-status">Normal</span>
+          </div>
+          <div class="metric-body">
+            <div class="metric-value" id="val-aht-temp">-- <span class="unit">°C</span></div>
+            <div class="metric-spark">AHT20 Sensor (I2C 0x38)</div>
+          </div>
+        </div>
+
+        <!-- DS18B20 Soil Temp -->
+        <div class="metric-card">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-temperature-arrow-down color-soil-temp"></i> DS18B20 Soil Temp</span>
+            <span class="badge badge-optimal" id="soil-temp-status">Optimal</span>
+          </div>
+          <div class="metric-body">
+            <div class="metric-value" id="val-soil-temp">-- <span class="unit">°C</span></div>
+            <div class="metric-spark">OneWire Probe (GPIO 4)</div>
+          </div>
+        </div>
+
+        <!-- BME280 Air Humidity -->
+        <div class="metric-card">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-droplet color-hum"></i> BME280 Humidity</span>
+            <span class="badge badge-normal">Normal</span>
+          </div>
+          <div class="metric-body">
+            <div class="metric-value" id="val-bme-hum">-- <span class="unit">%</span></div>
+            <div class="metric-spark">BME280 Humidity</div>
+          </div>
+        </div>
+
+        <!-- AHT20 Air Humidity -->
+        <div class="metric-card">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-water color-aht"></i> AHT20 Humidity</span>
+            <span class="badge badge-normal">Normal</span>
+          </div>
+          <div class="metric-body">
+            <div class="metric-value" id="val-aht-hum">-- <span class="unit">%</span></div>
+            <div class="metric-spark">AHT20 Humidity</div>
+          </div>
+        </div>
+
+        <!-- Capacitive Soil Moisture -->
+        <div class="metric-card">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-plant-wilt color-cap"></i> Cap. Soil Moisture</span>
+            <span class="badge badge-moist" id="cap-moist-status">Moist</span>
+          </div>
+          <div class="metric-body">
+            <div class="metric-value" id="val-cap-moist">-- <span class="unit">%</span></div>
+            <div class="metric-spark">Raw ADC: <span id="val-cap-raw">--</span></div>
+          </div>
+        </div>
+
+        <!-- Resistive Soil Moisture -->
+        <div class="metric-card">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-bolt color-res"></i> Res. Soil Moisture</span>
+            <span class="badge badge-moist" id="res-moist-status">Moist</span>
+          </div>
+          <div class="metric-body">
+            <div class="metric-value" id="val-res-moist">-- <span class="unit">%</span></div>
+            <div class="metric-spark">Raw ADC: <span id="val-res-raw">--</span></div>
+          </div>
+        </div>
+
+        <!-- Atmospheric Pressure -->
+        <div class="metric-card">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-gauge-high color-press"></i> Air Pressure</span>
+            <span class="badge badge-normal">Stable</span>
+          </div>
+          <div class="metric-body">
+            <div class="metric-value" id="val-bme-press">-- <span class="unit">hPa</span></div>
+            <div class="metric-spark">BME280 Barometer</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- LIVE INTERACTIVE WAVEFORM CHARTS -->
+      <section class="charts-grid">
+        
+        <!-- Air & Soil Temperature Comparison Waveform -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3><i class="fa-solid fa-chart-line color-temp"></i> Temperature Waveform (BME280 vs AHT20 vs Soil)</h3>
+            <div class="chart-controls">
+              <span class="live-pill"><i class="fa-solid fa-circle"></i> Live Waveform</span>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="temperatureChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Dual Humidity Comparison Waveform -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3><i class="fa-solid fa-chart-area color-hum"></i> Air Humidity Comparison (BME280 vs AHT20)</h3>
+            <div class="chart-controls">
+              <span class="live-pill"><i class="fa-solid fa-circle"></i> Live Waveform</span>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="humidityChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Soil Moisture Comparison Waveform -->
+        <div class="chart-card full-width">
+          <div class="chart-card-header">
+            <h3><i class="fa-solid fa-water color-cap"></i> Soil Moisture Comparison (Capacitive vs Resistive)</h3>
+            <div class="chart-controls">
+              <span class="timestamp-label" id="last-update-time">Last update: Waiting for data...</span>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="soilMoistureChart"></canvas>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- DATA TABLE PREVIEW -->
+      <section class="table-section">
+        <div class="table-card">
+          <div class="table-card-header">
+            <h3><i class="fa-solid fa-table"></i> Multi-Sensor Telemetry Log History</h3>
+            <span class="records-count" id="records-count">0 Records Loaded</span>
+          </div>
+          <div class="table-responsive">
+            <table id="telemetry-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>BME Temp (°C)</th>
+                  <th>AHT Temp (°C)</th>
+                  <th>Soil Temp (°C)</th>
+                  <th>BME Hum (%)</th>
+                  <th>AHT Hum (%)</th>
+                  <th>Cap. Moist (%)</th>
+                  <th>Res. Moist (%)</th>
+                  <th>Pressure (hPa)</th>
+                </tr>
+              </thead>
+              <tbody id="table-body">
+                <tr>
+                  <td colspan="9" class="empty-state">No telemetry data received yet. Connect your ESP32 or click "Sim Telemetry" to test.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <p>Dual Air & Soil Telemetry Studio • ESP32 + Firebase Realtime Database Integration</p>
+    </footer>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
