@@ -1,0 +1,7 @@
+node_modules/
+.wrangler/
+*.idsig
+soil_air_telemetry_studio_native.apk
+android/app/build/
+android/.gradle/
+android_app/

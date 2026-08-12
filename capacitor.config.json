@@ -1,0 +1,8 @@
+{
+  "appId": "com.soilair.telemetry",
+  "appName": "Soil Air Telemetry Studio",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}
