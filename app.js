@@ -1,4 +1,4 @@
-// Dual Air & Soil Telemetry Studio Engine (v2.3 - Stock Chart & Resilient Offline History Mode)
+// Dual Air & Soil Telemetry Studio Engine (v2.4 - Instant History & Stock Chart Mode)
 
 const FIREBASE_BASE_URL = "https://esp32-soil-and-air-default-rtdb.asia-southeast1.firebasedatabase.app/";
 const FIREBASE_API_KEY = "AIzaSyD-E7fj6XtqIysg1MDztO2AfuaBV9an4fY";
@@ -50,7 +50,6 @@ async function getFirebaseIdToken() {
 let rawTelemetryHistory = [];
 let filteredHistory = [];
 let activeRangeMode = "24h";
-let isConnected = false;
 let isDemoActive = false;
 let demoIntervalTimer = null;
 
@@ -191,7 +190,7 @@ function applyTimeFilter() {
     summaryText = "Last 7 days of telemetry";
   } else if (activeRangeMode === "all") {
     cutoffMs = 0;
-    summaryText = `Full history log (${rawTelemetryHistory.length} entries)`;
+    summaryText = `Full history log (${rawTelemetryHistory.length} total entries)`;
   } else if (activeRangeMode === "custom") {
     const fromTime = elDateFrom.value ? new Date(elDateFrom.value).getTime() : 0;
     const toTime = elDateTo.value ? new Date(elDateTo.value).getTime() : Infinity;
@@ -212,7 +211,7 @@ function applyTimeFilter() {
     return tMs >= cutoffMs;
   });
 
-  // STOCK CHART / RESILIENT FALLBACK: If filtered history in the last X hours is empty because ESP32 was off,
+  // STOCK CHART / RESILIENT FALLBACK: If filtered history in strict last X hours is empty because ESP32 was off,
   // NEVER show a blank screen! Fallback to showing the latest historical records available in Firebase!
   if (filteredHistory.length === 0 && rawTelemetryHistory.length > 0) {
     filteredHistory = rawTelemetryHistory.slice(-50);
@@ -225,19 +224,20 @@ function applyTimeFilter() {
 
 function parseRecordTimestampMs(r) {
   if (!r) return 0;
-  if (r.Timestamp) {
-    const d = new Date(r.Timestamp);
+  if (r.Date && r.Time) {
+    const d = new Date(`${r.Date}T${r.Time}`);
     if (!isNaN(d.getTime())) return d.getTime();
   }
-  if (r.Date && r.Time) {
-    const d = new Date(`${r.Date}T${r.Time}Z`);
+  if (r.Timestamp) {
+    const cleanStamp = r.Timestamp.replace("Z", "");
+    const d = new Date(cleanStamp);
     if (!isNaN(d.getTime())) return d.getTime();
   }
   return 0;
 }
 
 // ============================================================================
-// DYNAMIC ESP32 POWER & HEARTBEAT STALENESS ENGINE
+// DYNAMIC ESP32 POWER & HEARTBEAT STALENESS ENGINE (30s Active Check)
 // ============================================================================
 function checkEspHeartbeatStatus(latestRecord) {
   if (!latestRecord) {
@@ -256,30 +256,27 @@ function checkEspHeartbeatStatus(latestRecord) {
   }
 
   if (recordTimeMs === 0) {
-    setConnectionState("online", "ESP32 Stream Active");
+    setConnectionState("online", "ESP32 Live Stream Active");
     updateHeartbeatUI(true, "ACTIVE", timeString || "Just now", "badge-optimal");
     return;
   }
 
-  const ageSec = Math.floor((nowMs - recordTimeMs) / 1000);
+  const ageMs = Math.abs(nowMs - recordTimeMs);
+  const ageSec = Math.floor(ageMs / 1000);
   const ageMin = Math.floor(ageSec / 60);
   const ageHours = Math.floor(ageMin / 60);
 
-  if (ageSec < 35) {
-    // 🟢 ONLINE & POWERED ON
+  if (ageSec <= 35) {
+    // 🟢 ONLINE & ACTIVE (Logged within 35 seconds)
     setConnectionState("online", "ESP32 Live Stream Online");
     updateHeartbeatUI(true, "ACTIVE (Transmitting)", `Just now (${timeString})`, "badge-optimal");
-  } else if (ageSec < 300) {
-    // 🟡 STALE STREAM (Idle / Delayed)
-    setConnectionState("stale", `Idle • Last logged at ${timeString} (${ageSec}s ago)`);
-    updateHeartbeatUI(false, `STALE (${ageSec}s delay)`, `Last logged: ${timeString}`, "badge-stale");
   } else {
-    // 🔴 POWERED OFF / DISCONNECTED
+    // 🔴 INACTIVE / POWERED OFF (Last logged at X)
     let agoText = ageMin < 60 ? `${ageMin}m ago` : `${ageHours}h ${ageMin % 60}m ago`;
     const lastTimeDisplay = timeString ? `${timeString} (${agoText})` : agoText;
     
     setConnectionState("offline", `Offline • Last logged at ${lastTimeDisplay}`);
-    updateHeartbeatUI(false, `POWERED OFF (Last logged ${timeString || agoText})`, `Last logged: ${lastTimeDisplay}`, "badge-err");
+    updateHeartbeatUI(false, `INACTIVE (Last logged ${timeString || agoText})`, `Last logged: ${lastTimeDisplay}`, "badge-err");
   }
 }
 
@@ -342,7 +339,7 @@ function updateSdHealthBadge(statusMsg) {
 }
 
 // ============================================================================
-// CHART INITIALIZATION & INACTIVE POWER GAP DETECTION
+// CHART INITIALIZATION
 // ============================================================================
 function initCharts() {
   const chartOptions = {
@@ -486,44 +483,57 @@ async function fetchTelemetryData() {
   try {
     const token = await getFirebaseIdToken();
     const fetchUrl = token ? `${FIREBASE_SUITE_URL}?auth=${token}` : FIREBASE_SUITE_URL;
-    let res = await fetch(fetchUrl);
+    const res = await fetch(fetchUrl);
 
-    if (res.status === 401 || res.status === 403) {
-      firebaseIdToken = null;
-      const newToken = await getFirebaseIdToken();
-      if (newToken) {
-        res = await fetch(`${FIREBASE_SUITE_URL}?auth=${newToken}`);
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        firebaseIdToken = null;
+        const newToken = await getFirebaseIdToken();
+        if (newToken) {
+          const resRetry = await fetch(`${FIREBASE_SUITE_URL}?auth=${newToken}`);
+          if (resRetry.ok) {
+            const dataRetry = await resRetry.json();
+            processFirebaseData(dataRetry);
+            return;
+          }
+        }
       }
+      throw new Error(`HTTP ${res.status}`);
     }
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();
-
-    if (data && (data.Live || data.History)) {
-      let historyList = [];
-      if (data.History) historyList = Object.values(data.History);
-      if (data.Live) {
-        const liveStamp = data.Live.Timestamp || data.Live.Time;
-        const lastHistStamp = historyList.length > 0 ? (historyList[historyList.length - 1].Timestamp || historyList[historyList.length - 1].Time) : null;
-        if (!lastHistStamp || lastHistStamp !== liveStamp) {
-          historyList.push(data.Live);
-        }
-        updateSdHealthBadge(data.Live.SD_Card_Status || "OK");
-      }
-
-      rawTelemetryHistory = historyList;
-      applyTimeFilter();
-    } else {
-      fetchAhtFallbackData();
-    }
+    processFirebaseData(data);
   } catch (err) {
-    // If network fails, do NOT wipe UI! Maintain existing history array and update heartbeat
+    console.warn("Firebase fetch error, maintaining history view:", err);
     if (rawTelemetryHistory.length > 0) {
       applyTimeFilter();
     } else {
       fetchAhtFallbackData();
     }
+  }
+}
+
+function processFirebaseData(data) {
+  if (!data) return;
+
+  let historyList = [];
+  if (data.History) {
+    historyList = Object.values(data.History);
+  }
+  if (data.Live) {
+    const liveStamp = data.Live.Timestamp || data.Live.Time;
+    const lastHistStamp = historyList.length > 0 ? (historyList[historyList.length - 1].Timestamp || historyList[historyList.length - 1].Time) : null;
+    if (!lastHistStamp || lastHistStamp !== liveStamp) {
+      historyList.push(data.Live);
+    }
+    if (data.Live.SD_Card_Status) {
+      updateSdHealthBadge(data.Live.SD_Card_Status);
+    }
+  }
+
+  if (historyList.length > 0) {
+    rawTelemetryHistory = historyList;
+    applyTimeFilter();
   }
 }
 
@@ -556,11 +566,8 @@ async function fetchAhtFallbackData() {
     }
   } catch (e) {}
 
-  // If no network and no history, show demo fallback message but don't freeze
   if (rawTelemetryHistory.length > 0) {
     applyTimeFilter();
-  } else {
-    setConnectionState("offline", "Offline (Click Sim Icon to Test)");
   }
 }
 
@@ -820,7 +827,6 @@ function toggleDemoSimulation() {
   const now = new Date();
   const demoRecords = [];
 
-  // Generate 25 records with a simulated 15-minute power-off gap in the middle
   for (let i = 40; i >= 0; i--) {
     let offsetSec = i * 10;
     if (i > 20) offsetSec += 900; // Simulated 15-minute power off gap!
