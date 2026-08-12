@@ -1,4 +1,4 @@
-// Dual Air & Soil Telemetry Studio Engine (Native Android Mobile Edition)
+// Dual Air & Soil Telemetry Studio Engine (v2.2 with Dynamic Heartbeat & Power Gap Detection)
 
 const FIREBASE_BASE_URL = "https://esp32-soil-and-air-default-rtdb.asia-southeast1.firebasedatabase.app/";
 const FIREBASE_API_KEY = "AIzaSyD-E7fj6XtqIysg1MDztO2AfuaBV9an4fY";
@@ -68,10 +68,17 @@ const elLastUpdate = document.getElementById("last-update-time");
 const elRecordsCount = document.getElementById("records-count");
 const elTableBody = document.getElementById("table-body");
 
-// System SD Card Health DOM Elements
+// System Heartbeat & SD Card Health DOM Elements
+const elEspPowerVal = document.getElementById("val-esp-power");
+const elEspPowerIcon = document.getElementById("icon-esp-power");
 const elSdStatus = document.getElementById("val-sd-status");
 const elSdIcon = document.getElementById("icon-sd-status");
-const elSdDiagBadge = document.getElementById("diag-sd-badge");
+const elLastSeenVal = document.getElementById("val-last-seen");
+
+const elDiagEspBadge = document.getElementById("diag-esp-badge");
+const elDiagEspIcon = document.getElementById("diag-esp-icon");
+const elDiagLastAge = document.getElementById("diag-last-age");
+const elDiagSdBadge = document.getElementById("diag-sd-badge");
 
 // Timeline Filter Controls
 const elTimeRangeSelect = document.getElementById("time-range-select");
@@ -136,7 +143,7 @@ function initNavigation() {
 }
 
 // ============================================================================
-// TIMELINE FILTER CONTROLS
+// GLOBAL TIMELINE FILTER CONTROLS
 // ============================================================================
 function initTimelineControls() {
   if (!elTimeRangeSelect) return;
@@ -169,7 +176,10 @@ function applyTimeFilter() {
   let cutoffMs = 0;
   let summaryText = "";
 
-  if (activeRangeMode === "1h") {
+  if (activeRangeMode === "15m") {
+    cutoffMs = now - (15 * 60 * 1000);
+    summaryText = "Showing Realtime telemetry (Last 15 Min)";
+  } else if (activeRangeMode === "1h") {
     cutoffMs = now - (1 * 60 * 60 * 1000);
     summaryText = "Showing last 1 hour of telemetry";
   } else if (activeRangeMode === "24h") {
@@ -180,7 +190,7 @@ function applyTimeFilter() {
     summaryText = "Showing last 7 days of telemetry";
   } else if (activeRangeMode === "all") {
     cutoffMs = 0;
-    summaryText = `Showing full log (${rawTelemetryHistory.length} entries)`;
+    summaryText = `Showing full log (${rawTelemetryHistory.length} total entries)`;
   } else if (activeRangeMode === "custom") {
     const fromTime = elDateFrom.value ? new Date(elDateFrom.value).getTime() : 0;
     const toTime = elDateTo.value ? new Date(elDateTo.value).getTime() : Infinity;
@@ -190,7 +200,7 @@ function applyTimeFilter() {
       return tMs >= fromTime && tMs <= toTime;
     });
     
-    summaryText = `Filtered ${filteredHistory.length} entries in custom range`;
+    summaryText = `Filtered ${filteredHistory.length} entries in custom date range`;
     if (elFilterSummaryText) elFilterSummaryText.textContent = summaryText;
     updateDashboardUI();
     return;
@@ -212,6 +222,7 @@ function applyTimeFilter() {
 }
 
 function parseRecordTimestampMs(r) {
+  if (!r) return 0;
   if (r.Timestamp) {
     const d = new Date(r.Timestamp);
     if (!isNaN(d.getTime())) return d.getTime();
@@ -220,17 +231,115 @@ function parseRecordTimestampMs(r) {
     const d = new Date(`${r.Date}T${r.Time}Z`);
     if (!isNaN(d.getTime())) return d.getTime();
   }
-  return new Date().getTime();
+  return 0;
 }
 
 // ============================================================================
-// CHART INITIALIZATION
+// DYNAMIC ESP32 POWER & HEARTBEAT STALENESS ENGINE
+// ============================================================================
+function checkEspHeartbeatStatus(latestRecord) {
+  if (!latestRecord) {
+    setConnectionState("offline", "ESP32 Offline (No Data)");
+    updateHeartbeatUI(false, "DISCONNECTED", "No Data Received", "badge-err");
+    return;
+  }
+
+  const recordTimeMs = parseRecordTimestampMs(latestRecord);
+  const nowMs = Date.now();
+
+  // If time is missing or invalid, assume live
+  if (recordTimeMs === 0) {
+    setConnectionState("online", "ESP32 Live Stream");
+    updateHeartbeatUI(true, "ACTIVE (Transmitting)", "Just now", "badge-optimal");
+    return;
+  }
+
+  const ageSec = Math.floor((nowMs - recordTimeMs) / 1000);
+  const ageMin = Math.floor(ageSec / 60);
+
+  if (ageSec < 35) {
+    // 🟢 ONLINE & POWERED ON
+    setConnectionState("online", "ESP32 Live Stream Online");
+    updateHeartbeatUI(true, "ACTIVE (Transmitting)", `${ageSec}s ago`, "badge-optimal");
+  } else if (ageSec < 300) {
+    // 🟡 STALE STREAM (Idle / Delayed)
+    setConnectionState("stale", `Stream Idle (Last seen ${ageSec}s ago)`);
+    updateHeartbeatUI(false, `STALE (${ageSec}s delay)`, `${ageSec}s ago`, "badge-stale");
+  } else {
+    // 🔴 POWERED OFF / DISCONNECTED
+    const displayAge = ageMin < 60 ? `${ageMin} min ago` : `${Math.floor(ageMin / 60)}h ago`;
+    setConnectionState("offline", `ESP32 Power Off (Last seen ${displayAge})`);
+    updateHeartbeatUI(false, `POWERED OFF (${displayAge})`, displayAge, "badge-err");
+  }
+}
+
+function updateHeartbeatUI(isActive, powerText, lastSeenText, badgeClass) {
+  if (elEspPowerVal) {
+    elEspPowerVal.textContent = powerText;
+    elEspPowerVal.style.color = isActive ? "#34d399" : (badgeClass === "badge-stale" ? "#fbbf24" : "#f87171");
+  }
+
+  if (elEspPowerIcon) {
+    elEspPowerIcon.className = isActive ? "fa-solid fa-power-off color-hum" : "fa-solid fa-power-off color-temp";
+  }
+
+  if (elLastSeenVal) {
+    elLastSeenVal.textContent = lastSeenText;
+  }
+
+  if (elDiagEspBadge) {
+    elDiagEspBadge.textContent = powerText;
+    elDiagEspBadge.className = `badge ${badgeClass}`;
+  }
+
+  if (elDiagEspIcon) {
+    elDiagEspIcon.className = isActive ? "diag-icon color-hum" : "diag-icon color-temp";
+  }
+
+  if (elDiagLastAge) {
+    elDiagLastAge.textContent = lastSeenText;
+  }
+}
+
+function setConnectionState(stateClass, message) {
+  if (elStatusText) elStatusText.textContent = message;
+  if (!elStatusBadge) return;
+
+  elStatusBadge.className = "connection-badge";
+  if (stateClass) elStatusBadge.classList.add(stateClass);
+}
+
+function updateSdHealthBadge(statusMsg) {
+  if (!elSdStatus) return;
+  
+  if (statusMsg === "OK") {
+    elSdStatus.textContent = "LOGGING (10s)";
+    elSdStatus.style.color = "#34d399";
+    if (elSdIcon) elSdIcon.className = "fa-solid fa-sd-card color-hum";
+    if (elSdDiagBadge) {
+      elSdDiagBadge.textContent = "ONLINE (FAT32 OK)";
+      elSdDiagBadge.className = "badge badge-optimal";
+    }
+  } else {
+    elSdStatus.textContent = `ERROR (${statusMsg})`;
+    elSdStatus.style.color = "#f87171";
+    if (elSdIcon) elSdIcon.className = "fa-solid fa-triangle-exclamation color-temp";
+    if (elSdDiagBadge) {
+      elSdDiagBadge.textContent = `ERR: ${statusMsg}`;
+      elSdDiagBadge.className = "badge badge-err";
+    }
+  }
+}
+
+// ============================================================================
+// CHART INITIALIZATION & INACTIVE POWER GAP DETECTION
 // ============================================================================
 function initCharts() {
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    animation: { duration: 400 },
+    spanGaps: false, // CRITICAL: Breaks line graph when null gap values are inserted!
+    animation: { duration: 300 },
     scales: {
       x: {
         grid: { color: "rgba(255, 255, 255, 0.05)" },
@@ -258,7 +367,7 @@ function initCharts() {
           borderColor: "#ff5e62",
           backgroundColor: "rgba(255, 94, 98, 0.12)",
           fill: false,
-          tension: 0.35,
+          tension: 0.25,
           borderWidth: 2,
           pointRadius: 2,
           data: []
@@ -268,7 +377,7 @@ function initCharts() {
           borderColor: "#38ef7d",
           backgroundColor: "rgba(56, 239, 125, 0.08)",
           fill: false,
-          tension: 0.35,
+          tension: 0.25,
           borderWidth: 2,
           pointRadius: 2,
           data: []
@@ -278,7 +387,7 @@ function initCharts() {
           borderColor: "#ff9966",
           backgroundColor: "transparent",
           borderDash: [5, 5],
-          tension: 0.35,
+          tension: 0.25,
           borderWidth: 2,
           pointRadius: 2,
           data: []
@@ -300,7 +409,7 @@ function initCharts() {
           borderColor: "#00f2fe",
           backgroundColor: "rgba(0, 242, 254, 0.12)",
           fill: true,
-          tension: 0.35,
+          tension: 0.25,
           borderWidth: 2,
           pointRadius: 2,
           data: []
@@ -310,7 +419,7 @@ function initCharts() {
           borderColor: "#38ef7d",
           backgroundColor: "rgba(56, 239, 125, 0.08)",
           fill: true,
-          tension: 0.35,
+          tension: 0.25,
           borderWidth: 2,
           pointRadius: 2,
           data: []
@@ -332,7 +441,7 @@ function initCharts() {
           borderColor: "#00f2fe",
           backgroundColor: "rgba(0, 242, 254, 0.15)",
           fill: true,
-          tension: 0.35,
+          tension: 0.25,
           borderWidth: 2,
           pointRadius: 2,
           data: []
@@ -342,7 +451,7 @@ function initCharts() {
           borderColor: "#4facfe",
           backgroundColor: "rgba(79, 172, 254, 0.1)",
           fill: true,
-          tension: 0.35,
+          tension: 0.25,
           borderWidth: 2,
           pointRadius: 2,
           data: []
@@ -382,8 +491,6 @@ async function fetchTelemetryData() {
     const data = await res.json();
 
     if (data && (data.Live || data.History)) {
-      setConnectionOnline(true, "Firebase Live Stream Connected");
-
       let historyList = [];
       if (data.History) historyList = Object.values(data.History);
       if (data.Live) {
@@ -401,7 +508,7 @@ async function fetchTelemetryData() {
       fetchAhtFallbackData();
     }
   } catch (err) {
-    setConnectionOnline(false, "Connecting to ESP32 Stream...");
+    setConnectionState("offline", "Connecting to ESP32 Stream...");
   }
 }
 
@@ -413,7 +520,6 @@ async function fetchAhtFallbackData() {
     if (res.ok) {
       const data = await res.json();
       if (data) {
-        setConnectionOnline(true, "Firebase (AHT20 Stream Connected)");
         rawTelemetryHistory = Object.values(data).map(item => ({
           Timestamp: item.DateTime || new Date().toISOString(),
           BME_AirTemp_C: (item.Temperature || 25.4) + 0.3,
@@ -435,45 +541,19 @@ async function fetchAhtFallbackData() {
     }
   } catch (e) {}
 
-  setConnectionOnline(false, "Offline (Click Sim Icon to Test)");
-}
-
-function setConnectionOnline(online, message) {
-  isConnected = online;
-  if (elStatusText) elStatusText.textContent = message;
-  if (online && elStatusBadge) elStatusBadge.classList.add("online");
-  else if (elStatusBadge) elStatusBadge.classList.remove("online");
-}
-
-function updateSdHealthBadge(statusMsg) {
-  if (!elSdStatus) return;
-  
-  if (statusMsg === "OK") {
-    elSdStatus.textContent = "LOGGING (10s)";
-    elSdStatus.style.color = "#34d399";
-    if (elSdIcon) elSdIcon.className = "fa-solid fa-sd-card color-hum";
-    if (elSdDiagBadge) {
-      elSdDiagBadge.textContent = "ONLINE (FAT32 OK)";
-      elSdDiagBadge.className = "badge badge-optimal";
-    }
-  } else {
-    elSdStatus.textContent = `ERROR (${statusMsg})`;
-    elSdStatus.style.color = "#f87171";
-    if (elSdIcon) elSdIcon.className = "fa-solid fa-triangle-exclamation color-temp";
-    if (elSdDiagBadge) {
-      elSdDiagBadge.textContent = `ERR: ${statusMsg}`;
-      elSdDiagBadge.className = "badge badge-err";
-    }
-  }
+  setConnectionState("offline", "Offline (Click Sim Icon to Test)");
 }
 
 // ============================================================================
-// UI UPDATES
+// UI UPDATES & POWER-OFF GAP INJECTION
 // ============================================================================
 function updateDashboardUI() {
   if (filteredHistory.length === 0) return;
 
   const latest = filteredHistory[filteredHistory.length - 1];
+
+  // Dynamic ESP32 Active Power & Heartbeat Staleness Check
+  checkEspHeartbeatStatus(latest);
 
   // Update SD Health Status
   if (latest.SD_Card_Status) {
@@ -497,52 +577,99 @@ function updateDashboardUI() {
   if (elResRaw) elResRaw.textContent = latest.ResMoisture_Raw ?? "--";
   if (elBmePress) elBmePress.innerHTML = `${formatNum(latest.BME_AirPressure_hPa ?? latest.AirPressure_hPa, 1)} <span class="unit">hPa</span>`;
 
-  // 2. Update Charts
+  // 2. Update Waveform Charts with Inactive Gap Injection
   updateCharts(filteredHistory);
 
-  // 3. Update Table
+  // 3. Update Full History Table
   updateTable(filteredHistory);
 
-  if (elRecordsCount) elRecordsCount.textContent = `${filteredHistory.length} Filtered (${rawTelemetryHistory.length} Total)`;
-  if (elLastUpdate) elLastUpdate.textContent = `Last update: ${latest.Time || latest.Timestamp || new Date().toLocaleTimeString()}`;
+  if (elRecordsCount) elRecordsCount.textContent = `${filteredHistory.length} Records in Selected Timeline Range (${rawTelemetryHistory.length} Total)`;
+  if (elLastUpdate) elLastUpdate.textContent = `Last record: ${latest.Time || latest.Timestamp || new Date().toLocaleTimeString()}`;
 }
 
 function updateCharts(records) {
-  const maxChartPoints = 40;
-  const sliceRecords = records.length > maxChartPoints ? 
-    records.filter((_, idx) => idx % Math.ceil(records.length / maxChartPoints) === 0) : records;
+  if (!records || records.length === 0) return;
 
-  const labels = sliceRecords.map(r => {
-    if (r.Time) return r.Time;
-    if (r.Timestamp) {
-      const parts = r.Timestamp.split("T");
-      return parts.length > 1 ? parts[1].replace("Z", "") : r.Timestamp;
+  // Downsample to max 120 points on chart for ultra-smooth 60fps rendering
+  const maxChartPoints = 120;
+  const step = Math.max(1, Math.floor(records.length / maxChartPoints));
+  const sampledRecords = records.filter((_, idx) => idx % step === 0);
+
+  const labels = [];
+  const bmeTempData = [];
+  const ahtTempData = [];
+  const soilTempData = [];
+
+  const bmeHumData = [];
+  const ahtHumData = [];
+
+  const capMoistData = [];
+  const resMoistData = [];
+
+  let prevMs = 0;
+  const maxGapMs = 90000; // 90 Seconds Gap threshold = ESP32 Power Off / Disconnection!
+
+  sampledRecords.forEach((r, idx) => {
+    const currentMs = parseRecordTimestampMs(r);
+
+    // GAP DETECTION: If gap between logs > 90 seconds, insert null gap to break line chart!
+    if (prevMs > 0 && currentMs > 0 && (currentMs - prevMs > maxGapMs)) {
+      labels.push("OFFLINE GAP");
+      bmeTempData.push(null);
+      ahtTempData.push(null);
+      soilTempData.push(null);
+
+      bmeHumData.push(null);
+      ahtHumData.push(null);
+
+      capMoistData.push(null);
+      resMoistData.push(null);
     }
-    return "";
+
+    prevMs = currentMs;
+
+    let timeLabel = "";
+    if (r.Time) {
+      timeLabel = r.Time;
+    } else if (r.Timestamp) {
+      const parts = r.Timestamp.split("T");
+      timeLabel = parts.length > 1 ? parts[1].replace("Z", "") : r.Timestamp;
+    }
+
+    labels.push(timeLabel);
+    bmeTempData.push(r.BME_AirTemp_C ?? r.AirTemp_C ?? null);
+    ahtTempData.push(r.AHT_AirTemp_C ?? r.AirTemp_C ?? null);
+    soilTempData.push(r.SoilTemp_C ?? null);
+
+    bmeHumData.push(r.BME_AirHumidity_Pct ?? r.AirHumidity_Pct ?? null);
+    ahtHumData.push(r.AHT_AirHumidity_Pct ?? r.AirHumidity_Pct ?? null);
+
+    capMoistData.push(r.CapMoisture_Pct ?? null);
+    resMoistData.push(r.ResMoisture_Pct ?? null);
   });
 
   // 1. Temperature Chart
   if (temperatureChart) {
     temperatureChart.data.labels = labels;
-    temperatureChart.data.datasets[0].data = sliceRecords.map(r => r.BME_AirTemp_C ?? r.AirTemp_C ?? 0);
-    temperatureChart.data.datasets[1].data = sliceRecords.map(r => r.AHT_AirTemp_C ?? r.AirTemp_C ?? 0);
-    temperatureChart.data.datasets[2].data = sliceRecords.map(r => r.SoilTemp_C ?? 0);
+    temperatureChart.data.datasets[0].data = bmeTempData;
+    temperatureChart.data.datasets[1].data = ahtTempData;
+    temperatureChart.data.datasets[2].data = soilTempData;
     temperatureChart.update();
   }
 
   // 2. Humidity Chart
   if (humidityChart) {
     humidityChart.data.labels = labels;
-    humidityChart.data.datasets[0].data = sliceRecords.map(r => r.BME_AirHumidity_Pct ?? r.AirHumidity_Pct ?? 0);
-    humidityChart.data.datasets[1].data = sliceRecords.map(r => r.AHT_AirHumidity_Pct ?? r.AirHumidity_Pct ?? 0);
+    humidityChart.data.datasets[0].data = bmeHumData;
+    humidityChart.data.datasets[1].data = ahtHumData;
     humidityChart.update();
   }
 
   // 3. Soil Moisture Chart
   if (soilMoistureChart) {
     soilMoistureChart.data.labels = labels;
-    soilMoistureChart.data.datasets[0].data = sliceRecords.map(r => r.CapMoisture_Pct ?? 0);
-    soilMoistureChart.data.datasets[1].data = sliceRecords.map(r => r.ResMoisture_Pct ?? 0);
+    soilMoistureChart.data.datasets[0].data = capMoistData;
+    soilMoistureChart.data.datasets[1].data = resMoistData;
     soilMoistureChart.update();
   }
 }
@@ -550,7 +677,9 @@ function updateCharts(records) {
 function updateTable(records) {
   if (!elTableBody) return;
   elTableBody.innerHTML = "";
-  const reversed = [...records].reverse().slice(0, 15);
+
+  // Show all records in filtered range (up to 100 entries reversed)
+  const reversed = [...records].reverse().slice(0, 100);
 
   reversed.forEach(r => {
     const tr = document.createElement("tr");
@@ -624,7 +753,7 @@ function exportFilteredCsvLog() {
 }
 
 // ============================================================================
-// DEMO SIMULATION
+// DEMO SIMULATION (WITH INACTIVE GAP DEMONSTRATION)
 // ============================================================================
 function toggleDemoSimulation() {
   if (isDemoActive) {
@@ -634,7 +763,7 @@ function toggleDemoSimulation() {
       elBtnDemo.classList.remove("active");
       elBtnDemo.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i>`;
     }
-    setConnectionOnline(false, "Simulation Stopped");
+    setConnectionState("offline", "Simulation Stopped");
     return;
   }
 
@@ -643,13 +772,16 @@ function toggleDemoSimulation() {
     elBtnDemo.classList.add("active");
     elBtnDemo.innerHTML = `<i class="fa-solid fa-stop"></i>`;
   }
-  setConnectionOnline(true, "Live Demo Telemetry Streaming");
+  setConnectionState("online", "Live Demo Telemetry Streaming");
 
   const now = new Date();
   const demoRecords = [];
 
-  for (let i = 24; i >= 0; i--) {
-    const t = new Date(now.getTime() - i * 10000);
+  // Generate 25 records with a simulated 15-minute power-off gap in the middle
+  for (let i = 40; i >= 0; i--) {
+    let offsetSec = i * 10;
+    if (i > 20) offsetSec += 900; // Simulated 15-minute power off gap!
+    const t = new Date(now.getTime() - offsetSec * 1000);
     demoRecords.push(generateSampleRecord(t));
   }
 

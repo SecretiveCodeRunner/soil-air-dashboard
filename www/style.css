@@ -1,4 +1,4 @@
-/* Modern Native Android Mobile UI Theme */
+/* Modern Native Android Mobile UI Theme (v2.2 with Dynamic Heartbeat & Power Gap Detection) */
 
 :root {
   --bg-dark: #0b0f19;
@@ -23,6 +23,8 @@
   --badge-normal-text: #60a5fa;
   --badge-moist-bg: rgba(6, 182, 212, 0.18);
   --badge-moist-text: #22d3ee;
+  --badge-stale-bg: rgba(245, 158, 11, 0.2);
+  --badge-stale-text: #fbbf24;
   --badge-err-bg: rgba(239, 68, 68, 0.2);
   --badge-err-text: #f87171;
   
@@ -142,6 +144,26 @@ body {
   color: #34d399;
 }
 
+.connection-badge.stale .pulse-dot {
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+.connection-badge.stale {
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.connection-badge.offline .pulse-dot {
+  background-color: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+.connection-badge.offline {
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
 .icon-btn {
   width: 38px;
   height: 38px;
@@ -170,6 +192,66 @@ body {
   0% { transform: scale(0.95); opacity: 0.8; }
   50% { transform: scale(1.2); opacity: 1; }
   100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+/* GLOBAL TIMELINE FILTER BAR */
+.global-filter-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--panel-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 14px;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.custom-select, .date-input {
+  background: rgba(11, 15, 25, 0.9);
+  border: 1px solid var(--panel-border);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-main);
+  font-size: 12px;
+  outline: none;
+}
+
+.custom-date-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-date-group.hidden {
+  display: none;
+}
+
+.filter-summary {
+  font-size: 11px;
+  color: #00f2fe;
+  font-family: var(--font-mono);
+  background: rgba(0, 242, 254, 0.08);
+  padding: 4px 10px;
+  border-radius: 12px;
 }
 
 /* TABBED VIEW PANELS */
@@ -261,6 +343,7 @@ body {
 .badge-normal { background: var(--badge-normal-bg); color: var(--badge-normal-text); }
 .badge-optimal { background: var(--badge-optimal-bg); color: var(--badge-optimal-text); }
 .badge-moist { background: var(--badge-moist-bg); color: var(--badge-moist-text); }
+.badge-stale { background: var(--badge-stale-bg); color: var(--badge-stale-text); }
 .badge-err { background: var(--badge-err-bg); color: var(--badge-err-text); }
 
 .metric-value {
@@ -315,6 +398,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 12px;
 }
 
@@ -324,6 +409,12 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.chart-legend-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .live-pill {
@@ -338,6 +429,18 @@ body {
   gap: 4px;
 }
 
+.gap-pill {
+  font-size: 10px;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .timestamp-label {
   font-size: 11px;
   color: var(--text-muted);
@@ -346,54 +449,8 @@ body {
 
 .chart-container {
   position: relative;
-  height: 230px;
+  height: 250px;
   width: 100%;
-}
-
-/* TIMELINE FILTER TOOLBAR */
-.filter-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 10px 14px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-md);
-  margin-bottom: 14px;
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-group label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.custom-select, .date-input {
-  background: rgba(11, 15, 25, 0.9);
-  border: 1px solid var(--panel-border);
-  color: var(--text-primary);
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-main);
-  font-size: 12px;
-  outline: none;
-}
-
-.filter-summary {
-  font-size: 11px;
-  color: #00f2fe;
-  font-family: var(--font-mono);
-  background: rgba(0, 242, 254, 0.08);
-  padding: 4px 10px;
-  border-radius: 12px;
 }
 
 /* TABLE SECTION */
@@ -429,7 +486,7 @@ body {
 
 .table-responsive {
   overflow-x: auto;
-  max-height: 340px;
+  max-height: 420px;
   overflow-y: auto;
 }
 

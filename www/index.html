@@ -34,14 +34,14 @@
         </div>
         <div class="brand-text">
           <h1>Telemetry Studio</h1>
-          <span class="subtitle">ESP32 • Air & Soil Monitor</span>
+          <span class="subtitle">ESP32 • Air & Soil Suite</span>
         </div>
       </div>
 
       <div class="header-actions">
-        <div class="connection-badge" id="connection-status">
+        <div class="connection-badge offline" id="connection-status">
           <span class="pulse-dot"></span>
-          <span id="status-text">Connecting...</span>
+          <span id="status-text">Checking ESP32...</span>
         </div>
         <button class="icon-btn" id="btn-demo-data" title="Toggle Demo Simulation">
           <i class="fa-solid fa-wand-magic-sparkles"></i>
@@ -49,22 +49,47 @@
       </div>
     </header>
 
-    <!-- VIEW TAB 1: METRICS & HARDWARE SUMMARY -->
+    <!-- GLOBAL TIMELINE & RANGE FILTER BAR (Applies across Metrics, Waveforms & Logs) -->
+    <section class="global-filter-toolbar">
+      <div class="filter-group">
+        <label for="time-range-select"><i class="fa-solid fa-clock-rotate-left"></i> Timeline Window:</label>
+        <select id="time-range-select" class="custom-select">
+          <option value="15m">Realtime (Last 15 Min)</option>
+          <option value="1h">Last 1 Hour</option>
+          <option value="24h" selected>Last 24 Hours</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="all">All History (Full Log)</option>
+          <option value="custom">Custom Date Range...</option>
+        </select>
+      </div>
+
+      <div class="custom-date-group hidden" id="custom-date-container">
+        <input type="datetime-local" id="date-from" class="date-input" title="From Date">
+        <input type="datetime-local" id="date-to" class="date-input" title="To Date">
+        <button class="btn btn-secondary btn-sm" id="btn-apply-custom-date">Apply</button>
+      </div>
+
+      <div class="filter-summary" id="filter-summary-text">
+        Showing last 24 hours (with offline gap detection)
+      </div>
+    </section>
+
+    <!-- VIEW TAB 1: METRICS & DYNAMIC HARDWARE HEARTBEAT -->
     <div class="view-panel active" id="view-metrics">
       
-      <!-- QUICK HARDWARE HEALTH BANNER -->
-      <div class="system-banner">
+      <!-- DYNAMIC ESP32 POWER & HEARTBEAT BANNER -->
+      <div class="system-banner" id="heartbeat-banner">
         <div class="sys-item">
-          <i class="fa-solid fa-microchip color-cap"></i>
-          <span>ESP32 MCU: <strong>ACTIVE</strong></span>
+          <i class="fa-solid fa-power-off" id="icon-esp-power"></i>
+          <span>ESP32 Hardware: <strong id="val-esp-power">CHECKING...</strong></span>
         </div>
         <div class="sys-item">
           <i class="fa-solid fa-sd-card" id="icon-sd-status"></i>
-          <span>MicroSD CSV: <strong id="val-sd-status">INITIALIZING</strong></span>
+          <span>MicroSD Log: <strong id="val-sd-status">INITIALIZING</strong></span>
         </div>
         <div class="sys-item">
-          <i class="fa-solid fa-cloud-bolt color-hum"></i>
-          <span>Log Rate: <strong>10s Sync</strong></span>
+          <i class="fa-solid fa-clock" id="icon-last-seen"></i>
+          <span>Last Telemetry: <strong id="val-last-seen">--</strong></span>
         </div>
       </div>
 
@@ -74,11 +99,11 @@
         <div class="metric-card">
           <div class="card-header">
             <span class="card-title"><i class="fa-solid fa-temperature-half color-bme"></i> BME280 Air Temp</span>
-            <span class="badge badge-normal">Normal</span>
+            <span class="badge badge-normal" id="badge-bme-temp">Normal</span>
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-bme-temp">-- <span class="unit">°C</span></div>
-            <div class="metric-spark">BME280 (I2C 0x76/0x77)</div>
+            <div class="metric-spark">BME280 Air Sensor (I2C 0x76)</div>
           </div>
         </div>
 
@@ -86,11 +111,11 @@
         <div class="metric-card">
           <div class="card-header">
             <span class="card-title"><i class="fa-solid fa-temperature-low color-aht"></i> AHT20 Air Temp</span>
-            <span class="badge badge-normal">Normal</span>
+            <span class="badge badge-normal" id="badge-aht-temp">Normal</span>
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-aht-temp">-- <span class="unit">°C</span></div>
-            <div class="metric-spark">AHT20 (I2C 0x38)</div>
+            <div class="metric-spark">AHT20 Air Sensor (I2C 0x38)</div>
           </div>
         </div>
 
@@ -98,7 +123,7 @@
         <div class="metric-card">
           <div class="card-header">
             <span class="card-title"><i class="fa-solid fa-temperature-arrow-down color-soil-temp"></i> DS18B20 Soil Temp</span>
-            <span class="badge badge-optimal">Optimal</span>
+            <span class="badge badge-optimal" id="badge-soil-temp">Optimal</span>
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-soil-temp">-- <span class="unit">°C</span></div>
@@ -114,7 +139,7 @@
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-bme-hum">-- <span class="unit">%</span></div>
-            <div class="metric-spark">BME280 Humidity</div>
+            <div class="metric-spark">BME280 Barometer</div>
           </div>
         </div>
 
@@ -126,7 +151,7 @@
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-aht-hum">-- <span class="unit">%</span></div>
-            <div class="metric-spark">AHT20 Humidity</div>
+            <div class="metric-spark">AHT20 Hygrometer</div>
           </div>
         </div>
 
@@ -162,14 +187,14 @@
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-bme-press">-- <span class="unit">hPa</span></div>
-            <div class="metric-spark">BME280 Barometer</div>
+            <div class="metric-spark">BME280 Pressure Sensor</div>
           </div>
         </div>
       </section>
 
     </div>
 
-    <!-- VIEW TAB 2: LIVE CHARTS & WAVEFORMS -->
+    <!-- VIEW TAB 2: LIVE CHARTS WITH TIMELINE RANGE & GAP DETECTION -->
     <div class="view-panel" id="view-charts">
       <section class="charts-grid">
         
@@ -177,7 +202,10 @@
         <div class="chart-card">
           <div class="chart-card-header">
             <h3><i class="fa-solid fa-chart-line color-temp"></i> Temperature Waveform</h3>
-            <span class="live-pill"><i class="fa-solid fa-circle"></i> Live</span>
+            <div class="chart-legend-pills">
+              <span class="live-pill"><i class="fa-solid fa-circle"></i> Timeline Window Applied</span>
+              <span class="gap-pill" title="Broken lines indicate ESP32 power-off / inactive gaps"><i class="fa-solid fa-plug-circle-xmark"></i> Gap Detection Active</span>
+            </div>
           </div>
           <div class="chart-container">
             <canvas id="temperatureChart"></canvas>
@@ -187,8 +215,8 @@
         <!-- Air Humidity Comparison -->
         <div class="chart-card">
           <div class="chart-card-header">
-            <h3><i class="fa-solid fa-chart-area color-hum"></i> Air Humidity Comparison</h3>
-            <span class="live-pill"><i class="fa-solid fa-circle"></i> Live</span>
+            <h3><i class="fa-solid fa-chart-area color-hum"></i> Air Humidity Waveform</h3>
+            <span class="live-pill"><i class="fa-solid fa-circle"></i> BME280 vs AHT20</span>
           </div>
           <div class="chart-container">
             <canvas id="humidityChart"></canvas>
@@ -209,34 +237,8 @@
       </section>
     </div>
 
-    <!-- VIEW TAB 3: LOGS HISTORY & CSV EXPORT -->
+    <!-- VIEW TAB 3: FULL LOG HISTORY (WITH TIMELINE RANGE FILTERING) -->
     <div class="view-panel" id="view-logs">
-      
-      <!-- TIMELINE & DATE FILTER TOOLBAR -->
-      <section class="filter-toolbar">
-        <div class="filter-group">
-          <label for="time-range-select"><i class="fa-solid fa-clock-rotate-left"></i> Range:</label>
-          <select id="time-range-select" class="custom-select">
-            <option value="1h">Last 1 Hour</option>
-            <option value="24h" selected>Last 24 Hours</option>
-            <option value="7d">Last 7 Days</option>
-            <option value="all">All History</option>
-            <option value="custom">Custom Date...</option>
-          </select>
-        </div>
-
-        <div class="custom-date-group hidden" id="custom-date-container">
-          <input type="datetime-local" id="date-from" class="date-input">
-          <input type="datetime-local" id="date-to" class="date-input">
-          <button class="btn btn-secondary btn-sm" id="btn-apply-custom-date">Apply</button>
-        </div>
-
-        <div class="filter-summary" id="filter-summary-text">
-          Last 24 hours log
-        </div>
-      </section>
-
-      <!-- DATA TABLE LOG HISTORY -->
       <section class="table-section">
         <div class="table-card">
           <div class="table-card-header">
@@ -267,20 +269,29 @@
           </div>
         </div>
       </section>
-
     </div>
 
-    <!-- VIEW TAB 4: SYSTEM DIAGNOSTICS -->
+    <!-- VIEW TAB 4: HARDWARE DIAGNOSTICS & HEARTBEAT METRICS -->
     <div class="view-panel" id="view-system">
       <section class="diagnostics-grid">
         
         <div class="diag-card">
+          <div class="diag-icon color-temp" id="diag-esp-icon"><i class="fa-solid fa-microchip"></i></div>
+          <div class="diag-info">
+            <h3>ESP32 Active Power Detection</h3>
+            <p class="diag-detail">State: <span class="badge badge-normal" id="diag-esp-badge">CHECKING...</span></p>
+            <p class="diag-detail">Heartbeat Timeout: <strong>30 Seconds</strong></p>
+            <p class="diag-detail">Last Sync Age: <strong id="diag-last-age">--</strong></p>
+          </div>
+        </div>
+
+        <div class="diag-card">
           <div class="diag-icon color-cap"><i class="fa-solid fa-sd-card"></i></div>
           <div class="diag-info">
             <h3>MicroSD CSV Datalogger</h3>
-            <p class="diag-detail">Logging interval: <strong>10 Seconds</strong></p>
-            <p class="diag-detail">CSV Target File: <code>/unified_dual_air_soil_log.csv</code></p>
-            <p class="diag-detail">Hardware Health: <span class="badge badge-normal" id="diag-sd-badge">CHECKING</span></p>
+            <p class="diag-detail">Log Frequency: <strong>10 Seconds</strong></p>
+            <p class="diag-detail">File Path: <code>/unified_dual_air_soil_log.csv</code></p>
+            <p class="diag-detail">Status: <span class="badge badge-normal" id="diag-sd-badge">CHECKING</span></p>
           </div>
         </div>
 
@@ -288,19 +299,9 @@
           <div class="diag-icon color-hum"><i class="fa-solid fa-fire-flame-curved"></i></div>
           <div class="diag-info">
             <h3>Firebase Realtime Database</h3>
-            <p class="diag-detail">Cloud Endpoint: <code>esp32-soil-and-air-default-rtdb</code></p>
-            <p class="diag-detail">Sync Frequency: <strong>10 Seconds</strong></p>
-            <p class="diag-detail">Status: <span class="badge badge-optimal">AUTHENTICATED</span></p>
-          </div>
-        </div>
-
-        <div class="diag-card">
-          <div class="diag-icon color-temp"><i class="fa-solid fa-microchip"></i></div>
-          <div class="diag-info">
-            <h3>ESP32 Hardware Interfaces</h3>
-            <p class="diag-detail">I2C Bus (GPIO 21, 22): BME280, AHT20, DS3231 RTC, OLED</p>
-            <p class="diag-detail">OneWire (GPIO 4): DS18B20 Soil Probe</p>
-            <p class="diag-detail">ADC1 (GPIO 34, 35): Capacitive & Resistive Moisture</p>
+            <p class="diag-detail">Endpoint: <code>esp32-soil-and-air-default-rtdb</code></p>
+            <p class="diag-detail">Push Rate: <strong>10 Seconds</strong></p>
+            <p class="diag-detail">Cloud Auth: <span class="badge badge-optimal">CONNECTED</span></p>
           </div>
         </div>
 
