@@ -1,0 +1,24 @@
+{
+  "name": "Dual Air & Soil Telemetry Studio",
+  "short_name": "SoilAirStudio",
+  "description": "Real-time ESP32 multi-sensor telemetry dashboard for air and soil monitoring",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b0f19",
+  "theme_color": "#0f172a",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

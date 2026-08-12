@@ -98,6 +98,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   elBtnExport.addEventListener("click", exportFilteredCsvLog);
   elBtnDemo.addEventListener("click", toggleDemoSimulation);
+
+  // Register PWA Service Worker
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  }
 });
 
 // ============================================================================
