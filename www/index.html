@@ -49,7 +49,7 @@
       </div>
     </header>
 
-    <!-- GLOBAL TIMELINE & RANGE FILTER BAR (Applies across Metrics, Waveforms & Logs) -->
+    <!-- GLOBAL TIMELINE & RANGE FILTER BAR -->
     <section class="global-filter-toolbar">
       <div class="filter-group">
         <label for="time-range-select"><i class="fa-solid fa-clock-rotate-left"></i> Timeline Window:</label>
@@ -70,7 +70,7 @@
       </div>
 
       <div class="filter-summary" id="filter-summary-text">
-        Showing last 24 hours (with offline gap detection)
+        Showing last 24 hours
       </div>
     </section>
 
@@ -203,8 +203,8 @@
           <div class="chart-card-header">
             <h3><i class="fa-solid fa-chart-line color-temp"></i> Temperature Waveform</h3>
             <div class="chart-legend-pills">
-              <span class="live-pill"><i class="fa-solid fa-circle"></i> Timeline Window Applied</span>
-              <span class="gap-pill" title="Broken lines indicate ESP32 power-off / inactive gaps"><i class="fa-solid fa-plug-circle-xmark"></i> Gap Detection Active</span>
+              <span class="live-pill"><i class="fa-solid fa-circle"></i> Stock Chart Mode</span>
+              <span class="gap-pill" title="Broken lines indicate ESP32 power-off / inactive gaps"><i class="fa-solid fa-plug-circle-xmark"></i> Offline Gaps</span>
             </div>
           </div>
           <div class="chart-container">
@@ -237,14 +237,22 @@
       </section>
     </div>
 
-    <!-- VIEW TAB 3: FULL LOG HISTORY (WITH TIMELINE RANGE FILTERING) -->
+    <!-- VIEW TAB 3: FULL LOG HISTORY WITH CSV EXPORT BUTTON -->
     <div class="view-panel" id="view-logs">
       <section class="table-section">
         <div class="table-card">
           <div class="table-card-header">
-            <h3><i class="fa-solid fa-table"></i> Telemetry Log History</h3>
-            <span class="records-count" id="records-count">0 Records</span>
+            <div class="header-left">
+              <h3><i class="fa-solid fa-table"></i> Telemetry Log History</h3>
+              <span class="records-count" id="records-count">0 Records</span>
+            </div>
+            
+            <!-- PROMINENT CSV DOWNLOAD BUTTON IN HISTORY TAB -->
+            <button class="btn btn-primary btn-sm btn-open-csv-modal" id="btn-tab-export-csv">
+              <i class="fa-solid fa-file-arrow-down"></i> Export CSV Log
+            </button>
           </div>
+          
           <div class="table-responsive">
             <table id="telemetry-table">
               <thead>
@@ -271,7 +279,7 @@
       </section>
     </div>
 
-    <!-- VIEW TAB 4: HARDWARE DIAGNOSTICS & HEARTBEAT METRICS -->
+    <!-- VIEW TAB 4: HARDWARE DIAGNOSTICS -->
     <div class="view-panel" id="view-system">
       <section class="diagnostics-grid">
         
@@ -280,7 +288,7 @@
           <div class="diag-info">
             <h3>ESP32 Active Power Detection</h3>
             <p class="diag-detail">State: <span class="badge badge-normal" id="diag-esp-badge">CHECKING...</span></p>
-            <p class="diag-detail">Heartbeat Timeout: <strong>30 Seconds</strong></p>
+            <p class="diag-detail">Heartbeat Window: <strong>35 Seconds</strong></p>
             <p class="diag-detail">Last Sync Age: <strong id="diag-last-age">--</strong></p>
           </div>
         </div>
@@ -309,7 +317,7 @@
     </div>
 
     <!-- FLOATING ACTION BUTTON (FAB) FOR CSV EXPORT -->
-    <button class="fab-btn" id="btn-export-csv" title="Export Filtered CSV Log">
+    <button class="fab-btn btn-open-csv-modal" id="btn-fab-export-csv" title="Export CSV Log">
       <i class="fa-solid fa-file-arrow-down"></i>
     </button>
 
@@ -333,6 +341,61 @@
       </button>
     </nav>
 
+  </div>
+
+  <!-- INTERACTIVE CSV EXPORT RANGE SELECTION MODAL -->
+  <div class="modal-overlay hidden" id="csv-export-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-file-csv color-hum"></i> Download Telemetry CSV Log</h3>
+        <button class="modal-close" id="btn-close-csv-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <label class="modal-label">Choose Timeline Range for CSV Export:</label>
+        
+        <div class="range-radio-list">
+          <label class="range-radio-item">
+            <input type="radio" name="export-range" value="15m">
+            <span class="radio-label">⚡ Realtime (Last 15 Min)</span>
+          </label>
+          <label class="range-radio-item">
+            <input type="radio" name="export-range" value="1h">
+            <span class="radio-label">⏱️ Last 1 Hour</span>
+          </label>
+          <label class="range-radio-item">
+            <input type="radio" name="export-range" value="24h" checked>
+            <span class="radio-label">📅 Last 24 Hours</span>
+          </label>
+          <label class="range-radio-item">
+            <input type="radio" name="export-range" value="7d">
+            <span class="radio-label">🗓️ Last 7 Days</span>
+          </label>
+          <label class="range-radio-item">
+            <input type="radio" name="export-range" value="all">
+            <span class="radio-label">📜 All History (Full Log)</span>
+          </label>
+          <label class="range-radio-item">
+            <input type="radio" name="export-range" value="custom">
+            <span class="radio-label">📆 Custom Date Range...</span>
+          </label>
+        </div>
+
+        <div class="modal-custom-dates hidden" id="modal-custom-date-container">
+          <div class="input-wrapper">
+            <label>From:</label>
+            <input type="datetime-local" id="modal-date-from" class="date-input">
+          </div>
+          <div class="input-wrapper">
+            <label>To:</label>
+            <input type="datetime-local" id="modal-date-to" class="date-input">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-cancel-csv">Cancel</button>
+        <button class="btn btn-primary" id="btn-confirm-export-csv"><i class="fa-solid fa-download"></i> Download CSV</button>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>

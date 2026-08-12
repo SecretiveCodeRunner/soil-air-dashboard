@@ -1,4 +1,4 @@
-// Dual Air & Soil Telemetry Studio Engine (v2.4 - Instant History & Stock Chart Mode)
+// Dual Air & Soil Telemetry Studio Engine (v2.5 - CSV Range Selector Modal & Blob Exporter)
 
 const FIREBASE_BASE_URL = "https://esp32-soil-and-air-default-rtdb.asia-southeast1.firebasedatabase.app/";
 const FIREBASE_API_KEY = "AIzaSyD-E7fj6XtqIysg1MDztO2AfuaBV9an4fY";
@@ -61,7 +61,6 @@ let soilMoistureChart = null;
 // DOM Elements
 const elStatusBadge = document.getElementById("connection-status");
 const elStatusText = document.getElementById("status-text");
-const elBtnExport = document.getElementById("btn-export-csv");
 const elBtnDemo = document.getElementById("btn-demo-data");
 const elLastUpdate = document.getElementById("last-update-time");
 const elRecordsCount = document.getElementById("records-count");
@@ -87,6 +86,15 @@ const elDateTo = document.getElementById("date-to");
 const elBtnApplyCustomDate = document.getElementById("btn-apply-custom-date");
 const elFilterSummaryText = document.getElementById("filter-summary-text");
 
+// CSV Export Modal Elements
+const elCsvExportModal = document.getElementById("csv-export-modal");
+const elBtnCloseCsvModal = document.getElementById("btn-close-csv-modal");
+const elBtnCancelCsv = document.getElementById("btn-cancel-csv");
+const elBtnConfirmExportCsv = document.getElementById("btn-confirm-export-csv");
+const elModalCustomDateContainer = document.getElementById("modal-custom-date-container");
+const elModalDateFrom = document.getElementById("modal-date-from");
+const elModalDateTo = document.getElementById("modal-date-to");
+
 // Metric Elements
 const elBmeTemp = document.getElementById("val-bme-temp");
 const elAhtTemp = document.getElementById("val-aht-temp");
@@ -110,11 +118,11 @@ document.addEventListener("DOMContentLoaded", () => {
   initNavigation();
   initCharts();
   initTimelineControls();
+  initCsvModalControls();
   
-  // Immediately poll Firebase to populate metrics, stock charts, & history
+  // Poll Firebase to populate metrics, stock charts, & history
   startFirebasePolling();
 
-  if (elBtnExport) elBtnExport.addEventListener("click", exportFilteredCsvLog);
   if (elBtnDemo) elBtnDemo.addEventListener("click", toggleDemoSimulation);
 
   // Register PWA Service Worker
@@ -141,6 +149,146 @@ function initNavigation() {
       }
     });
   });
+}
+
+// ============================================================================
+// CSV EXPORT MODAL & RANGE SELECTION CONTROLS
+// ============================================================================
+function initCsvModalControls() {
+  // Attach listeners to all CSV export buttons (History Tab, FAB, etc.)
+  const openModalButtons = document.querySelectorAll(".btn-open-csv-modal");
+  openModalButtons.forEach(btn => {
+    btn.addEventListener("click", openCsvExportModal);
+  });
+
+  if (elBtnCloseCsvModal) elBtnCloseCsvModal.addEventListener("click", closeCsvExportModal);
+  if (elBtnCancelCsv) elBtnCancelCsv.addEventListener("click", closeCsvExportModal);
+
+  // Radio range selection listener
+  const radioInputs = document.querySelectorAll('input[name="export-range"]');
+  radioInputs.forEach(radio => {
+    radio.addEventListener("change", (e) => {
+      if (e.target.value === "custom") {
+        if (elModalCustomDateContainer) elModalCustomDateContainer.classList.remove("hidden");
+      } else {
+        if (elModalCustomDateContainer) elModalCustomDateContainer.classList.add("hidden");
+      }
+    });
+  });
+
+  if (elBtnConfirmExportCsv) {
+    elBtnConfirmExportCsv.addEventListener("click", executeSelectedCsvDownload);
+  }
+}
+
+function openCsvExportModal() {
+  if (elCsvExportModal) elCsvExportModal.classList.remove("hidden");
+}
+
+function closeCsvExportModal() {
+  if (elCsvExportModal) elCsvExportModal.classList.add("hidden");
+}
+
+function executeSelectedCsvDownload() {
+  const selectedRadio = document.querySelector('input[name="export-range"]:checked');
+  const chosenRange = selectedRadio ? selectedRadio.value : "24h";
+
+  let exportData = [];
+  const now = Date.now();
+  let cutoffMs = 0;
+
+  if (chosenRange === "15m") {
+    cutoffMs = now - (15 * 60 * 1000);
+  } else if (chosenRange === "1h") {
+    cutoffMs = now - (1 * 60 * 60 * 1000);
+  } else if (chosenRange === "24h") {
+    cutoffMs = now - (24 * 60 * 60 * 1000);
+  } else if (chosenRange === "7d") {
+    cutoffMs = now - (7 * 24 * 60 * 60 * 1000);
+  } else if (chosenRange === "all") {
+    cutoffMs = 0;
+  } else if (chosenRange === "custom") {
+    const fromTime = elModalDateFrom && elModalDateFrom.value ? new Date(elModalDateFrom.value).getTime() : 0;
+    const toTime = elModalDateTo && elModalDateTo.value ? new Date(elModalDateTo.value).getTime() : Infinity;
+    
+    exportData = rawTelemetryHistory.filter(r => {
+      const tMs = parseRecordTimestampMs(r);
+      return tMs >= fromTime && tMs <= toTime;
+    });
+  }
+
+  if (chosenRange !== "custom") {
+    exportData = rawTelemetryHistory.filter(r => {
+      const tMs = parseRecordTimestampMs(r);
+      return tMs >= cutoffMs;
+    });
+  }
+
+  // Fallback to all raw history if range returned empty
+  if (exportData.length === 0 && rawTelemetryHistory.length > 0) {
+    exportData = rawTelemetryHistory;
+  }
+
+  if (exportData.length === 0) {
+    alert("No telemetry records available to export for the chosen timeline range.");
+    return;
+  }
+
+  // Generate CSV text
+  const headers = [
+    "Timestamp", "Date", "Time", "BME_AirTemp_C", "AHT_AirTemp_C", "SoilTemp_C",
+    "BME_AirHumidity_Pct", "AHT_AirHumidity_Pct", "BME_AirPressure_hPa",
+    "CapMoisture_Raw", "ResMoisture_Raw", "CapMoisture_Pct", "ResMoisture_Pct", "SD_Status"
+  ];
+
+  let csvRows = [];
+  csvRows.push(headers.join(","));
+
+  exportData.forEach(r => {
+    const row = [
+      r.Timestamp || "",
+      r.Date || "",
+      r.Time || "",
+      r.BME_AirTemp_C ?? r.AirTemp_C ?? "",
+      r.AHT_AirTemp_C ?? r.AirTemp_C ?? "",
+      r.SoilTemp_C ?? "",
+      r.BME_AirHumidity_Pct ?? r.AirHumidity_Pct ?? "",
+      r.AHT_AirHumidity_Pct ?? r.AirHumidity_Pct ?? "",
+      r.BME_AirPressure_hPa ?? r.AirPressure_hPa ?? "",
+      r.CapMoisture_Raw ?? "",
+      r.ResMoisture_Raw ?? "",
+      r.CapMoisture_Pct ?? "",
+      r.ResMoisture_Pct ?? "",
+      r.SD_Card_Status || "OK"
+    ];
+    csvRows.push(row.join(","));
+  });
+
+  const csvString = csvRows.join("\n");
+  const fileName = `soil_air_telemetry_${new Date().toISOString().slice(0,10)}_${chosenRange}.csv`;
+
+  // Trigger download using Blob & Object URL for 100% Android WebView & Browser compatibility
+  triggerBlobCsvDownload(csvString, fileName);
+  closeCsvExportModal();
+}
+
+function triggerBlobCsvDownload(csvString, fileName) {
+  try {
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+    const blobUrl = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.setAttribute("download", fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+  } catch (err) {
+    console.error("Blob Download Error:", err);
+    alert("Could not trigger download. Please check browser permissions.");
+  }
 }
 
 // ============================================================================
@@ -753,57 +901,7 @@ function formatNum(val, decimals = 1) {
 }
 
 // ============================================================================
-// FILTERED CSV EXPORT ENGINE
-// ============================================================================
-function exportFilteredCsvLog() {
-  const exportData = filteredHistory.length > 0 ? filteredHistory : rawTelemetryHistory;
-  if (exportData.length === 0) {
-    alert("No telemetry records available to export.");
-    return;
-  }
-
-  const headers = [
-    "Timestamp", "Date", "Time", "BME_AirTemp_C", "AHT_AirTemp_C", "SoilTemp_C",
-    "BME_AirHumidity_Pct", "AHT_AirHumidity_Pct", "BME_AirPressure_hPa",
-    "CapMoisture_Raw", "ResMoisture_Raw", "CapMoisture_Pct", "ResMoisture_Pct", "SD_Status"
-  ];
-
-  let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
-
-  exportData.forEach(r => {
-    const row = [
-      r.Timestamp || "",
-      r.Date || "",
-      r.Time || "",
-      r.BME_AirTemp_C ?? r.AirTemp_C ?? "",
-      r.AHT_AirTemp_C ?? r.AirTemp_C ?? "",
-      r.SoilTemp_C ?? "",
-      r.BME_AirHumidity_Pct ?? r.AirHumidity_Pct ?? "",
-      r.AHT_AirHumidity_Pct ?? r.AirHumidity_Pct ?? "",
-      r.BME_AirPressure_hPa ?? r.AirPressure_hPa ?? "",
-      r.CapMoisture_Raw ?? "",
-      r.ResMoisture_Raw ?? "",
-      r.CapMoisture_Pct ?? "",
-      r.ResMoisture_Pct ?? "",
-      r.SD_Card_Status || "OK"
-    ];
-    csvContent += row.join(",") + "\n";
-  });
-
-  const rangeSuffix = activeRangeMode === "custom" ? "custom_range" : activeRangeMode;
-  const fileName = `soil_air_telemetry_${new Date().toISOString().slice(0,10)}_${rangeSuffix}.csv`;
-
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
-  link.setAttribute("download", fileName);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-// ============================================================================
-// DEMO SIMULATION (WITH INACTIVE GAP DEMONSTRATION)
+// DEMO SIMULATION
 // ============================================================================
 function toggleDemoSimulation() {
   if (isDemoActive) {
