@@ -182,20 +182,20 @@ const viewPanels = document.querySelectorAll(".view-panel");
 // INITIALIZATION
 // ============================================================================
 document.addEventListener("DOMContentLoaded", () => {
-  initNavigation();
-  initThemeSwitcher();
-  initCharts();
-  initTimelineControls();
-  initCsvModalControls();
-  initGraphSubButtons();
-  initBangBangControls();
-  initMultiDeviceManager();
+  try { initNavigation(); } catch(e) { console.error("Nav init error:", e); }
+  try { initThemeSwitcher(); } catch(e) { console.error("Theme init error:", e); }
+  try { initCharts(); } catch(e) { console.error("Chart init error:", e); }
+  try { initTimelineControls(); } catch(e) { console.error("Timeline init error:", e); }
+  try { initCsvModalControls(); } catch(e) { console.error("CSV init error:", e); }
+  try { initGraphSubButtons(); } catch(e) { console.error("Graph buttons init error:", e); }
+  try { initBangBangControls(); } catch(e) { console.error("Bang-Bang init error:", e); }
+  try { initMultiDeviceManager(); } catch(e) { console.error("Multi-device init error:", e); }
   
-  // Load cached telemetry history immediately to prevent blank/checking screen on mobile app
-  loadCachedTelemetryData();
+  // Load cached telemetry history immediately to populate metrics, cards, & history
+  try { loadCachedTelemetryData(); } catch(e) { console.error("Cache load error:", e); }
 
-  // Poll Firebase to populate real-time metrics, stock charts, & history
-  startFirebasePolling();
+  // Poll Firebase to populate real-time metrics & updates
+  try { startFirebasePolling(); } catch(e) { console.error("Polling error:", e); }
 
   if (elBtnDemo) elBtnDemo.addEventListener("click", toggleDemoSimulation);
 
@@ -649,6 +649,11 @@ function updateSdHealthBadge(statusMsg, isEspActive = false) {
 // CHART INITIALIZATION
 // ============================================================================
 function initCharts() {
+  if (typeof Chart === "undefined") {
+    console.warn("Chart.js engine not available, waveforms disabled.");
+    return;
+  }
+
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -669,9 +674,12 @@ function initCharts() {
     }
   };
 
-  // 1. Temperature Comparison
-  const ctxTemp = document.getElementById("temperatureChart").getContext("2d");
-  temperatureChart = new Chart(ctxTemp, {
+  try {
+    // 1. Temperature Comparison
+    const elTempCanvas = document.getElementById("temperatureChart");
+    if (elTempCanvas) {
+      const ctxTemp = elTempCanvas.getContext("2d");
+      temperatureChart = new Chart(ctxTemp, {
     type: "line",
     data: {
       labels: [],
