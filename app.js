@@ -154,7 +154,10 @@ document.addEventListener("DOMContentLoaded", () => {
   initBangBangControls();
   initMultiDeviceManager();
   
-  // Poll Firebase to populate metrics, stock charts, & history
+  // Load cached telemetry history immediately to prevent blank/checking screen on mobile app
+  loadCachedTelemetryData();
+
+  // Poll Firebase to populate real-time metrics, stock charts, & history
   startFirebasePolling();
 
   if (elBtnDemo) elBtnDemo.addEventListener("click", toggleDemoSimulation);
@@ -850,6 +853,12 @@ function processFirebaseData(data) {
 
   if (historyList.length > 0) {
     rawTelemetryHistory = historyList;
+    
+    // Save to localStorage cache so mobile app loads instantly on cold start
+    try {
+      localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(historyList.slice(-200)));
+    } catch (e) {}
+
     const elStatusBox = document.getElementById("active-device-status-box");
     if (elStatusBox) {
       elStatusBox.innerHTML = `<span class="badge badge-optimal">ONLINE STREAM</span>`;
@@ -860,6 +869,19 @@ function processFirebaseData(data) {
       updateEmptyDeviceState();
     }
   }
+}
+
+function loadCachedTelemetryData() {
+  try {
+    const cachedStr = localStorage.getItem(`soil_air_cache_${activeDeviceId}`);
+    if (cachedStr) {
+      const cachedList = JSON.parse(cachedStr);
+      if (Array.isArray(cachedList) && cachedList.length > 0) {
+        rawTelemetryHistory = cachedList;
+        applyTimeFilter();
+      }
+    }
+  } catch (e) {}
 }
 
 function updateEmptyDeviceState() {
@@ -1642,6 +1664,7 @@ function switchActiveDevice(devId) {
 
   rawTelemetryHistory = [];
   filteredHistory = [];
+  loadCachedTelemetryData();
   fetchTelemetryData();
 }
 
