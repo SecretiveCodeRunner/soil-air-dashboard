@@ -209,12 +209,15 @@ document.addEventListener("DOMContentLoaded", () => {
 // NATIVE BOTTOM NAVIGATION
 // ============================================================================
 function initNavigation() {
-  navItems.forEach(item => {
+  const items = document.querySelectorAll(".nav-item");
+  const panels = document.querySelectorAll(".view-panel");
+
+  items.forEach(item => {
     item.addEventListener("click", () => {
       const targetId = item.getAttribute("data-target");
       
-      navItems.forEach(nav => nav.classList.remove("active"));
-      viewPanels.forEach(panel => panel.classList.remove("active"));
+      items.forEach(nav => nav.classList.remove("active"));
+      panels.forEach(p => p.classList.remove("active"));
 
       item.classList.add("active");
       const targetPanel = document.getElementById(targetId);
@@ -508,16 +511,19 @@ function applyTimeFilter() {
     return;
   }
 
-  filteredHistory = rawTelemetryHistory.filter(r => {
-    const tMs = parseRecordTimestampMs(r);
-    return tMs >= cutoffMs;
-  });
+  if (activeRangeMode === "all" || cutoffMs === 0) {
+    filteredHistory = [...rawTelemetryHistory];
+  } else {
+    // Filter items that match timestamp range OR are recent push entries (so new logging is NEVER hidden)
+    filteredHistory = rawTelemetryHistory.filter((r, idx) => {
+      if (idx >= rawTelemetryHistory.length - 100) return true;
+      const tMs = parseRecordTimestampMs(r);
+      return tMs >= cutoffMs;
+    });
+  }
 
-  // STOCK CHART / RESILIENT FALLBACK: If filtered history in strict last X hours is empty because ESP32 was off,
-  // NEVER show a blank screen! Fallback to showing the latest historical records available in Firebase!
   if (filteredHistory.length === 0 && rawTelemetryHistory.length > 0) {
-    filteredHistory = rawTelemetryHistory.slice(-50);
-    summaryText += ` (Showing latest ${filteredHistory.length} historical logs)`;
+    filteredHistory = [...rawTelemetryHistory];
   }
 
   if (elFilterSummaryText) elFilterSummaryText.textContent = summaryText;
