@@ -1,11 +1,11 @@
-// Dual Air & Soil Telemetry Studio Engine (v2.6 - Native Android Filesystem & Share Intent Edition)
+// Dual Air & Soil Telemetry Studio Engine (v3.0 - Multi-Device, Bang-Bang Control & Max/Min Edition)
 
 const FIREBASE_BASE_URL = "https://esp32-soil-and-air-default-rtdb.asia-southeast1.firebasedatabase.app/";
 const FIREBASE_API_KEY = "AIzaSyD-E7fj6XtqIysg1MDztO2AfuaBV9an4fY";
 const FIREBASE_USER_EMAIL = "apurbamaity227@gmail.com";
 const FIREBASE_USER_PASSWORD = "Student@12er";
 
-const FIREBASE_SUITE_URL = `${FIREBASE_BASE_URL}SensorData/SoilAirSuite.json`;
+let activeFirebaseSuiteUrl = `${FIREBASE_BASE_URL}SensorData/SoilAirSuite.json`;
 const FIREBASE_AHT_URL = `${FIREBASE_BASE_URL}SensorData/AHT20/History.json`;
 
 // Firebase Authentication State
@@ -57,6 +57,7 @@ let demoIntervalTimer = null;
 let temperatureChart = null;
 let humidityChart = null;
 let soilMoistureChart = null;
+let pressureChart = null;
 
 // DOM Elements
 const elStatusBadge = document.getElementById("connection-status");
@@ -119,6 +120,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initCharts();
   initTimelineControls();
   initCsvModalControls();
+  initGraphSubButtons();
+  initBangBangControls();
+  initMultiDeviceManager();
   
   // Poll Firebase to populate metrics, stock charts, & history
   startFirebasePolling();
@@ -695,6 +699,31 @@ function initCharts() {
     },
     options: chartOptions
   });
+
+  // 4. Atmospheric Pressure Waveform
+  const elPressCanvas = document.getElementById("pressureChart");
+  if (elPressCanvas) {
+    const ctxPress = elPressCanvas.getContext("2d");
+    pressureChart = new Chart(ctxPress, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: "Atmospheric Pressure (hPa)",
+            borderColor: "#a855f7",
+            backgroundColor: "rgba(168, 85, 247, 0.12)",
+            fill: true,
+            tension: 0.25,
+            borderWidth: 2,
+            pointRadius: 2,
+            data: []
+          }
+        ]
+      },
+      options: chartOptions
+    });
+  }
 }
 
 // ============================================================================
@@ -710,7 +739,7 @@ async function fetchTelemetryData() {
 
   try {
     const token = await getFirebaseIdToken();
-    const fetchUrl = token ? `${FIREBASE_SUITE_URL}?auth=${token}` : FIREBASE_SUITE_URL;
+    const fetchUrl = token ? `${activeFirebaseSuiteUrl}?auth=${token}` : activeFirebaseSuiteUrl;
     const res = await fetch(fetchUrl);
 
     if (!res.ok) {
@@ -718,7 +747,7 @@ async function fetchTelemetryData() {
         firebaseIdToken = null;
         const newToken = await getFirebaseIdToken();
         if (newToken) {
-          const resRetry = await fetch(`${FIREBASE_SUITE_URL}?auth=${newToken}`);
+          const resRetry = await fetch(`${activeFirebaseSuiteUrl}?auth=${newToken}`);
           if (resRetry.ok) {
             const dataRetry = await resRetry.json();
             processFirebaseData(dataRetry);
@@ -830,11 +859,65 @@ function updateDashboardUI() {
   if (elResRaw) elResRaw.textContent = latest.ResMoisture_Raw ?? "--";
   if (elBmePress) elBmePress.innerHTML = `${formatNum(latest.BME_AirPressure_hPa ?? latest.AirPressure_hPa, 1)} <span class="unit">hPa</span>`;
 
+  // Compute & Display Maximum and Minimum Stats for current window
+  updateMetricsStats(displayHistory);
+
+  // Evaluate Bang-Bang Controller Logic
+  evaluateBangBangController(latest);
+
   updateCharts(displayHistory);
   updateTable(displayHistory);
 
   if (elRecordsCount) elRecordsCount.textContent = `${displayHistory.length} Records Loaded (${rawTelemetryHistory.length} Total)`;
   if (elLastUpdate) elLastUpdate.textContent = `Last record: ${latest.Time || latest.Timestamp || new Date().toLocaleTimeString()}`;
+}
+
+function updateMetricsStats(records) {
+  if (!records || records.length === 0) return;
+
+  const getMinMax = (prop) => {
+    const vals = records
+      .map(r => r[prop] ?? (prop.includes("Temp") ? r.AirTemp_C : (prop.includes("Humidity") ? r.AirHumidity_Pct : r.AirPressure_hPa)))
+      .filter(v => v !== undefined && v !== null && !isNaN(v));
+    if (vals.length === 0) return { min: "--", max: "--" };
+    return { min: Math.min(...vals), max: Math.max(...vals) };
+  };
+
+  const setElText = (id, val, dec = 1) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = (val === "--" || val === undefined || isNaN(val)) ? "--" : Number(val).toFixed(dec);
+    }
+  };
+
+  const sBmeTemp = getMinMax("BME_AirTemp_C");
+  const sAhtTemp = getMinMax("AHT_AirTemp_C");
+  const sSoilTemp = getMinMax("SoilTemp_C");
+  const sBmeHum = getMinMax("BME_AirHumidity_Pct");
+  const sAhtHum = getMinMax("AHT_AirHumidity_Pct");
+  const sCapMoist = getMinMax("CapMoisture_Pct");
+  const sResMoist = getMinMax("ResMoisture_Pct");
+  const sBmePress = getMinMax("BME_AirPressure_hPa");
+
+  setElText("max-bme-temp", sBmeTemp.max, 1);
+  setElText("min-bme-temp", sBmeTemp.min, 1);
+  setElText("max-aht-temp", sAhtTemp.max, 1);
+  setElText("min-aht-temp", sAhtTemp.min, 1);
+  setElText("max-soil-temp", sSoilTemp.max, 1);
+  setElText("min-soil-temp", sSoilTemp.min, 1);
+
+  setElText("max-bme-hum", sBmeHum.max, 1);
+  setElText("min-bme-hum", sBmeHum.min, 1);
+  setElText("max-aht-hum", sAhtHum.max, 1);
+  setElText("min-aht-hum", sAhtHum.min, 1);
+
+  setElText("max-cap-moist", sCapMoist.max, 0);
+  setElText("min-cap-moist", sCapMoist.min, 0);
+  setElText("max-res-moist", sResMoist.max, 0);
+  setElText("min-res-moist", sResMoist.min, 0);
+
+  setElText("max-bme-press", sBmePress.max, 1);
+  setElText("min-bme-press", sBmePress.min, 1);
 }
 
 function updateCharts(records) {
@@ -854,6 +937,7 @@ function updateCharts(records) {
 
   const capMoistData = [];
   const resMoistData = [];
+  const pressData = [];
 
   let prevMs = 0;
   const maxGapMs = 90000;
@@ -872,6 +956,7 @@ function updateCharts(records) {
 
       capMoistData.push(null);
       resMoistData.push(null);
+      pressData.push(null);
     }
 
     prevMs = currentMs;
@@ -894,6 +979,7 @@ function updateCharts(records) {
 
     capMoistData.push(r.CapMoisture_Pct ?? null);
     resMoistData.push(r.ResMoisture_Pct ?? null);
+    pressData.push(r.BME_AirPressure_hPa ?? r.AirPressure_hPa ?? null);
   });
 
   const lastRecordMs = prevMs;
@@ -912,6 +998,7 @@ function updateCharts(records) {
 
     capMoistData.push(null); capMoistData.push(null);
     resMoistData.push(null); resMoistData.push(null);
+    pressData.push(null); pressData.push(null);
   }
 
   if (temperatureChart) {
@@ -934,6 +1021,12 @@ function updateCharts(records) {
     soilMoistureChart.data.datasets[0].data = capMoistData;
     soilMoistureChart.data.datasets[1].data = resMoistData;
     soilMoistureChart.update();
+  }
+
+  if (pressureChart) {
+    pressureChart.data.labels = labels;
+    pressureChart.data.datasets[0].data = pressData;
+    pressureChart.update();
   }
 }
 
@@ -1043,4 +1136,392 @@ function generateSampleRecord(dateObj) {
     ResMoisture_Raw: resRaw,
     SD_Card_Status: "OK"
   };
+}
+
+// ============================================================================
+// GRAPH PARAMETER SUB-BUTTONS FILTER MODULE
+// ============================================================================
+function initGraphSubButtons() {
+  const filterContainer = document.getElementById("graph-parameter-filters");
+  if (!filterContainer) return;
+
+  const pills = filterContainer.querySelectorAll(".sub-pill");
+  pills.forEach(pill => {
+    pill.addEventListener("click", () => {
+      pills.forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      const filter = pill.getAttribute("data-filter");
+      applyGraphFilter(filter);
+    });
+  });
+}
+
+function applyGraphFilter(filter) {
+  const cardTemp = document.getElementById("card-chart-temp");
+  const cardHum = document.getElementById("card-chart-hum");
+  const cardSoil = document.getElementById("card-chart-soil");
+  const cardPress = document.getElementById("card-chart-press");
+
+  const allCards = [cardTemp, cardHum, cardSoil, cardPress];
+  allCards.forEach(c => { if (c) c.classList.remove("hidden-card"); });
+
+  if (filter === "temp") {
+    if (cardHum) cardHum.classList.add("hidden-card");
+    if (cardSoil) cardSoil.classList.add("hidden-card");
+    if (cardPress) cardPress.classList.add("hidden-card");
+  } else if (filter === "hum") {
+    if (cardTemp) cardTemp.classList.add("hidden-card");
+    if (cardSoil) cardSoil.classList.add("hidden-card");
+    if (cardPress) cardPress.classList.add("hidden-card");
+  } else if (filter === "soil") {
+    if (cardTemp) cardTemp.classList.add("hidden-card");
+    if (cardHum) cardHum.classList.add("hidden-card");
+    if (cardPress) cardPress.classList.add("hidden-card");
+  } else if (filter === "press") {
+    if (cardTemp) cardTemp.classList.add("hidden-card");
+    if (cardHum) cardHum.classList.add("hidden-card");
+    if (cardSoil) cardSoil.classList.add("hidden-card");
+  }
+}
+
+// ============================================================================
+// BANG-BANG HYSTERESIS CONTROLLER MODULE
+// ============================================================================
+let bangBangConfig = {
+  autoIrrigation: true,
+  autoFan: true,
+  moistOn: 35,
+  moistOff: 75,
+  tempOn: 32,
+  tempOff: 27,
+  relays: { 1: false, 2: false, 3: false, 4: false }
+};
+
+function initBangBangControls() {
+  const saved = localStorage.getItem("soil_air_bang_bang");
+  if (saved) {
+    try { bangBangConfig = { ...bangBangConfig, ...JSON.parse(saved) }; } catch(e) {}
+  }
+
+  const rngMoistOn = document.getElementById("rng-moist-on");
+  const rngMoistOff = document.getElementById("rng-moist-off");
+  const dispMoistOn = document.getElementById("disp-moist-on");
+  const dispMoistOff = document.getElementById("disp-moist-off");
+
+  const rngTempOn = document.getElementById("rng-temp-on");
+  const rngTempOff = document.getElementById("rng-temp-off");
+  const dispTempOn = document.getElementById("disp-temp-on");
+  const dispTempOff = document.getElementById("disp-temp-off");
+
+  const chkIrrigation = document.getElementById("chk-auto-irrigation");
+  const chkFan = document.getElementById("chk-auto-fan");
+
+  if (rngMoistOn) {
+    rngMoistOn.value = bangBangConfig.moistOn;
+    if (dispMoistOn) dispMoistOn.textContent = `${bangBangConfig.moistOn}%`;
+    rngMoistOn.addEventListener("input", (e) => {
+      bangBangConfig.moistOn = parseInt(e.target.value, 10);
+      if (dispMoistOn) dispMoistOn.textContent = `${bangBangConfig.moistOn}%`;
+      saveBangBangConfig();
+    });
+  }
+
+  if (rngMoistOff) {
+    rngMoistOff.value = bangBangConfig.moistOff;
+    if (dispMoistOff) dispMoistOff.textContent = `${bangBangConfig.moistOff}%`;
+    rngMoistOff.addEventListener("input", (e) => {
+      bangBangConfig.moistOff = parseInt(e.target.value, 10);
+      if (dispMoistOff) dispMoistOff.textContent = `${bangBangConfig.moistOff}%`;
+      saveBangBangConfig();
+    });
+  }
+
+  if (rngTempOn) {
+    rngTempOn.value = bangBangConfig.tempOn;
+    if (dispTempOn) dispTempOn.textContent = `${bangBangConfig.tempOn}°C`;
+    rngTempOn.addEventListener("input", (e) => {
+      bangBangConfig.tempOn = parseInt(e.target.value, 10);
+      if (dispTempOn) dispTempOn.textContent = `${bangBangConfig.tempOn}°C`;
+      saveBangBangConfig();
+    });
+  }
+
+  if (rngTempOff) {
+    rngTempOff.value = bangBangConfig.tempOff;
+    if (dispTempOff) dispTempOff.textContent = `${bangBangConfig.tempOff}°C`;
+    rngTempOff.addEventListener("input", (e) => {
+      bangBangConfig.tempOff = parseInt(e.target.value, 10);
+      if (dispTempOff) dispTempOff.textContent = `${bangBangConfig.tempOff}°C`;
+      saveBangBangConfig();
+    });
+  }
+
+  if (chkIrrigation) {
+    chkIrrigation.checked = bangBangConfig.autoIrrigation;
+    chkIrrigation.addEventListener("change", (e) => {
+      bangBangConfig.autoIrrigation = e.target.checked;
+      saveBangBangConfig();
+    });
+  }
+
+  if (chkFan) {
+    chkFan.checked = bangBangConfig.autoFan;
+    chkFan.addEventListener("change", (e) => {
+      bangBangConfig.autoFan = e.target.checked;
+      saveBangBangConfig();
+    });
+  }
+
+  // Manual Relay Toggle Buttons
+  const relayBtns = document.querySelectorAll(".btn-toggle-relay");
+  relayBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const relayId = btn.getAttribute("data-relay");
+      bangBangConfig.relays[relayId] = !bangBangConfig.relays[relayId];
+      saveBangBangConfig();
+      updateRelaysUI();
+      pushRelayStatesToFirebase();
+    });
+  });
+
+  updateRelaysUI();
+}
+
+function saveBangBangConfig() {
+  localStorage.setItem("soil_air_bang_bang", JSON.stringify(bangBangConfig));
+}
+
+function evaluateBangBangController(latestRecord) {
+  if (!latestRecord) return;
+  const moist = latestRecord.CapMoisture_Pct ?? latestRecord.ResMoisture_Pct ?? 50;
+  const temp = latestRecord.BME_AirTemp_C ?? latestRecord.AHT_AirTemp_C ?? latestRecord.AirTemp_C ?? 25;
+
+  const elValPump = document.getElementById("val-pump-relay");
+  const elValFan = document.getElementById("val-fan-relay");
+
+  // Irrigation Hysteresis (ON when moisture <= lower setpoint, OFF when moisture >= upper setpoint)
+  if (bangBangConfig.autoIrrigation) {
+    if (moist <= bangBangConfig.moistOn) {
+      bangBangConfig.relays[1] = true;
+    } else if (moist >= bangBangConfig.moistOff) {
+      bangBangConfig.relays[1] = false;
+    }
+  }
+
+  // Cooling Fan Hysteresis (ON when temp >= upper setpoint, OFF when temp <= lower setpoint)
+  if (bangBangConfig.autoFan) {
+    if (temp >= bangBangConfig.tempOn) {
+      bangBangConfig.relays[2] = true;
+    } else if (temp <= bangBangConfig.tempOff) {
+      bangBangConfig.relays[2] = false;
+    }
+  }
+
+  if (elValPump) {
+    elValPump.textContent = bangBangConfig.relays[1] ? "ON (Irrigating Soil)" : "OFF (Moisture Normal)";
+    elValPump.className = bangBangConfig.relays[1] ? "state-on" : "state-off";
+  }
+
+  if (elValFan) {
+    elValFan.textContent = bangBangConfig.relays[2] ? "ON (Cooling Active)" : "OFF (Temp Normal)";
+    elValFan.className = bangBangConfig.relays[2] ? "state-on" : "state-off";
+  }
+
+  updateRelaysUI();
+}
+
+function updateRelaysUI() {
+  for (let i = 1; i <= 4; i++) {
+    const card = document.getElementById(`relay-card-${i}`);
+    if (card) {
+      if (bangBangConfig.relays[i]) {
+        card.classList.add("active-relay");
+      } else {
+        card.classList.remove("active-relay");
+      }
+    }
+  }
+}
+
+async function pushRelayStatesToFirebase() {
+  try {
+    const token = await getFirebaseIdToken();
+    const url = `${FIREBASE_BASE_URL}Control/Relays.json${token ? `?auth=${token}` : ''}`;
+    await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(bangBangConfig.relays)
+    });
+  } catch (e) {}
+}
+
+// ============================================================================
+// USER ACCOUNT & MULTI-DEVICE MANAGEMENT MODULE
+// ============================================================================
+let registeredDevices = [
+  { id: "ESP32-SOIL-AIR-01", name: "ESP32 Main Suite", path: "SensorData/SoilAirSuite", type: "ESP32" },
+  { id: "ESP32-GREENHOUSE-02", name: "Greenhouse Polyhouse Node", path: "SensorData/Greenhouse02", type: "ESP32" }
+];
+let activeDeviceId = "ESP32-SOIL-AIR-01";
+
+function initMultiDeviceManager() {
+  const savedDevs = localStorage.getItem("soil_air_devices");
+  if (savedDevs) {
+    try { registeredDevices = JSON.parse(savedDevs); } catch (e) {}
+  }
+  const savedActive = localStorage.getItem("soil_air_active_dev_id");
+  if (savedActive) activeDeviceId = savedActive;
+
+  renderDevicesList();
+  updateActiveDeviceBanner();
+
+  // Account Form Toggles
+  const btnToggleAcc = document.getElementById("btn-toggle-account-form");
+  const accFormBox = document.getElementById("account-form-box");
+  const btnSaveAcc = document.getElementById("btn-save-account-login");
+  const btnRefreshAuth = document.getElementById("btn-refresh-auth-token");
+
+  if (btnToggleAcc && accFormBox) {
+    btnToggleAcc.addEventListener("click", () => {
+      accFormBox.classList.toggle("hidden");
+    });
+  }
+
+  if (btnSaveAcc) {
+    btnSaveAcc.addEventListener("click", async () => {
+      const email = document.getElementById("input-account-email")?.value;
+      const pass = document.getElementById("input-account-pass")?.value;
+      if (!email || !pass) {
+        alert("Please enter both email and password.");
+        return;
+      }
+      firebaseIdToken = null;
+      alert(`Saved account credentials for ${email}. Re-authenticating with Firebase...`);
+      const t = await getFirebaseIdToken();
+      if (t) {
+        document.getElementById("user-email-display").textContent = email;
+        accFormBox.classList.add("hidden");
+        alert("Successfully authenticated with Firebase!");
+      } else {
+        alert("Authentication failed. Please verify credentials.");
+      }
+    });
+  }
+
+  if (btnRefreshAuth) {
+    btnRefreshAuth.addEventListener("click", async () => {
+      firebaseIdToken = null;
+      const t = await getFirebaseIdToken();
+      alert(t ? "Firebase security token refreshed!" : "Failed to refresh token.");
+    });
+  }
+
+  // Add Device Modal Controls
+  const modalAddDev = document.getElementById("add-device-modal");
+  const btnOpenAddDev = document.getElementById("btn-open-add-device");
+  const btnCloseDev = document.getElementById("btn-close-device-modal");
+  const btnCancelDev = document.getElementById("btn-cancel-device");
+  const btnSaveDev = document.getElementById("btn-save-new-device");
+
+  if (btnOpenAddDev && modalAddDev) {
+    btnOpenAddDev.addEventListener("click", () => modalAddDev.classList.remove("hidden"));
+  }
+  const closeModal = () => { if (modalAddDev) modalAddDev.classList.add("hidden"); };
+  if (btnCloseDev) btnCloseDev.addEventListener("click", closeModal);
+  if (btnCancelDev) btnCancelDev.addEventListener("click", closeModal);
+
+  if (btnSaveDev) {
+    btnSaveDev.addEventListener("click", () => {
+      const name = document.getElementById("new-dev-name")?.value.trim();
+      const id = document.getElementById("new-dev-id")?.value.trim();
+      const type = document.getElementById("new-dev-type")?.value;
+      const path = document.getElementById("new-dev-path")?.value.trim() || `SensorData/${id}`;
+
+      if (!name || !id) {
+        alert("Please provide a Device Name and Unique Device ID.");
+        return;
+      }
+
+      const existing = registeredDevices.find(d => d.id === id);
+      if (existing) {
+        alert("A device with this Unique ID already exists.");
+        return;
+      }
+
+      const newDev = { id, name, type, path };
+      registeredDevices.push(newDev);
+      localStorage.setItem("soil_air_devices", JSON.stringify(registeredDevices));
+      
+      closeModal();
+      renderDevicesList();
+      switchActiveDevice(id);
+    });
+  }
+}
+
+function renderDevicesList() {
+  const container = document.getElementById("devices-list-container");
+  if (!container) return;
+  container.innerHTML = "";
+
+  registeredDevices.forEach(dev => {
+    const card = document.createElement("div");
+    const isActive = dev.id === activeDeviceId;
+    card.className = `device-card ${isActive ? 'is-active-device' : ''}`;
+    card.innerHTML = `
+      <div class="device-card-header">
+        <h4>${dev.name}</h4>
+        <span class="device-type-badge">${dev.type || 'ESP32'}</span>
+      </div>
+      <code>ID: ${dev.id}</code>
+      <p class="dev-path">Path: <code>${dev.path}</code></p>
+      <div class="device-card-actions">
+        ${isActive 
+          ? `<span class="badge badge-optimal"><i class="fa-solid fa-check"></i> ACTIVE</span>` 
+          : `<button class="btn btn-secondary btn-sm btn-switch-dev" data-id="${dev.id}"><i class="fa-solid fa-play"></i> Switch Active</button>`
+        }
+      </div>
+    `;
+    container.appendChild(card);
+  });
+
+  const switchBtns = container.querySelectorAll(".btn-switch-dev");
+  switchBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const devId = btn.getAttribute("data-id");
+      switchActiveDevice(devId);
+    });
+  });
+}
+
+function switchActiveDevice(devId) {
+  const target = registeredDevices.find(d => d.id === devId);
+  if (!target) return;
+
+  activeDeviceId = devId;
+  localStorage.setItem("soil_air_active_dev_id", activeDeviceId);
+
+  // Update active Firebase URL
+  const cleanPath = target.path.endsWith('.json') ? target.path : `${target.path}.json`;
+  activeFirebaseSuiteUrl = `${FIREBASE_BASE_URL}${cleanPath}`;
+
+  updateActiveDeviceBanner();
+  renderDevicesList();
+
+  rawTelemetryHistory = [];
+  filteredHistory = [];
+  fetchTelemetryData();
+}
+
+function updateActiveDeviceBanner() {
+  const cur = registeredDevices.find(d => d.id === activeDeviceId) || registeredDevices[0];
+  if (!cur) return;
+
+  const elName = document.getElementById("active-device-name");
+  const elId = document.getElementById("active-device-id");
+  const elPath = document.getElementById("active-device-path");
+
+  if (elName) elName.textContent = cur.name;
+  if (elId) elId.textContent = `ID: ${cur.id}`;
+  if (elPath) elPath.innerHTML = `Firebase Path: <code>${cur.path}</code>`;
 }

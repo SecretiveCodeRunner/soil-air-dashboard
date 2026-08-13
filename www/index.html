@@ -93,7 +93,7 @@
         </div>
       </div>
 
-      <!-- METRIC CARDS GRID -->
+      <!-- METRIC CARDS GRID WITH MAX/MIN STATS -->
       <section class="metrics-row">
         <!-- BME280 Air Temp -->
         <div class="metric-card">
@@ -103,6 +103,10 @@
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-bme-temp">-- <span class="unit">°C</span></div>
+            <div class="metric-stats">
+              <span class="stat-item stat-max"><i class="fa-solid fa-arrow-trend-up"></i> Max: <strong id="max-bme-temp">--</strong>°C</span>
+              <span class="stat-item stat-min"><i class="fa-solid fa-arrow-trend-down"></i> Min: <strong id="min-bme-temp">--</strong>°C</span>
+            </div>
             <div class="metric-spark">BME280 Air Sensor (I2C 0x76)</div>
           </div>
         </div>
@@ -115,6 +119,10 @@
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-aht-temp">-- <span class="unit">°C</span></div>
+            <div class="metric-stats">
+              <span class="stat-item stat-max"><i class="fa-solid fa-arrow-trend-up"></i> Max: <strong id="max-aht-temp">--</strong>°C</span>
+              <span class="stat-item stat-min"><i class="fa-solid fa-arrow-trend-down"></i> Min: <strong id="min-aht-temp">--</strong>°C</span>
+            </div>
             <div class="metric-spark">AHT20 Air Sensor (I2C 0x38)</div>
           </div>
         </div>
@@ -127,6 +135,10 @@
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-soil-temp">-- <span class="unit">°C</span></div>
+            <div class="metric-stats">
+              <span class="stat-item stat-max"><i class="fa-solid fa-arrow-trend-up"></i> Max: <strong id="max-soil-temp">--</strong>°C</span>
+              <span class="stat-item stat-min"><i class="fa-solid fa-arrow-trend-down"></i> Min: <strong id="min-soil-temp">--</strong>°C</span>
+            </div>
             <div class="metric-spark">OneWire Probe (GPIO 4)</div>
           </div>
         </div>
@@ -139,6 +151,10 @@
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-bme-hum">-- <span class="unit">%</span></div>
+            <div class="metric-stats">
+              <span class="stat-item stat-max"><i class="fa-solid fa-arrow-trend-up"></i> Max: <strong id="max-bme-hum">--</strong>%</span>
+              <span class="stat-item stat-min"><i class="fa-solid fa-arrow-trend-down"></i> Min: <strong id="min-bme-hum">--</strong>%</span>
+            </div>
             <div class="metric-spark">BME280 Barometer</div>
           </div>
         </div>
@@ -151,6 +167,10 @@
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-aht-hum">-- <span class="unit">%</span></div>
+            <div class="metric-stats">
+              <span class="stat-item stat-max"><i class="fa-solid fa-arrow-trend-up"></i> Max: <strong id="max-aht-hum">--</strong>%</span>
+              <span class="stat-item stat-min"><i class="fa-solid fa-arrow-trend-down"></i> Min: <strong id="min-aht-hum">--</strong>%</span>
+            </div>
             <div class="metric-spark">AHT20 Hygrometer</div>
           </div>
         </div>
@@ -163,6 +183,10 @@
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-cap-moist">-- <span class="unit">%</span></div>
+            <div class="metric-stats">
+              <span class="stat-item stat-max"><i class="fa-solid fa-arrow-trend-up"></i> Max: <strong id="max-cap-moist">--</strong>%</span>
+              <span class="stat-item stat-min"><i class="fa-solid fa-arrow-trend-down"></i> Min: <strong id="min-cap-moist">--</strong>%</span>
+            </div>
             <div class="metric-spark">Raw ADC: <span id="val-cap-raw">--</span></div>
           </div>
         </div>
@@ -175,6 +199,10 @@
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-res-moist">-- <span class="unit">%</span></div>
+            <div class="metric-stats">
+              <span class="stat-item stat-max"><i class="fa-solid fa-arrow-trend-up"></i> Max: <strong id="max-res-moist">--</strong>%</span>
+              <span class="stat-item stat-min"><i class="fa-solid fa-arrow-trend-down"></i> Min: <strong id="min-res-moist">--</strong>%</span>
+            </div>
             <div class="metric-spark">Raw ADC: <span id="val-res-raw">--</span></div>
           </div>
         </div>
@@ -187,6 +215,10 @@
           </div>
           <div class="metric-body">
             <div class="metric-value" id="val-bme-press">-- <span class="unit">hPa</span></div>
+            <div class="metric-stats">
+              <span class="stat-item stat-max"><i class="fa-solid fa-arrow-trend-up"></i> Max: <strong id="max-bme-press">--</strong></span>
+              <span class="stat-item stat-min"><i class="fa-solid fa-arrow-trend-down"></i> Min: <strong id="min-bme-press">--</strong></span>
+            </div>
             <div class="metric-spark">BME280 Pressure Sensor</div>
           </div>
         </div>
@@ -194,12 +226,25 @@
 
     </div>
 
-    <!-- VIEW TAB 2: LIVE CHARTS WITH TIMELINE RANGE & GAP DETECTION -->
+    <!-- VIEW TAB 2: LIVE CHARTS WITH PARAMETER SUB-BUTTONS -->
     <div class="view-panel" id="view-charts">
+      
+      <!-- SUB-BUTTONS PARAMETER SELECTION BAR ABOVE BOTTOM NAV -->
+      <div class="graph-sub-toolbar">
+        <span class="toolbar-label"><i class="fa-solid fa-sliders"></i> Filter Parameter:</span>
+        <div class="sub-pill-group" id="graph-parameter-filters">
+          <button class="sub-pill active" data-filter="all"><i class="fa-solid fa-border-all"></i> All Sensors</button>
+          <button class="sub-pill" data-filter="temp"><i class="fa-solid fa-temperature-half"></i> Temperature</button>
+          <button class="sub-pill" data-filter="hum"><i class="fa-solid fa-droplet"></i> Humidity</button>
+          <button class="sub-pill" data-filter="soil"><i class="fa-solid fa-seedling"></i> Soil Moisture</button>
+          <button class="sub-pill" data-filter="press"><i class="fa-solid fa-gauge-high"></i> Pressure</button>
+        </div>
+      </div>
+
       <section class="charts-grid">
         
         <!-- Air & Soil Temperature Waveform -->
-        <div class="chart-card">
+        <div class="chart-card" id="card-chart-temp">
           <div class="chart-card-header">
             <h3><i class="fa-solid fa-chart-line color-temp"></i> Temperature Waveform</h3>
             <div class="chart-legend-pills">
@@ -213,7 +258,7 @@
         </div>
 
         <!-- Air Humidity Comparison -->
-        <div class="chart-card">
+        <div class="chart-card" id="card-chart-hum">
           <div class="chart-card-header">
             <h3><i class="fa-solid fa-chart-area color-hum"></i> Air Humidity Waveform</h3>
             <span class="live-pill"><i class="fa-solid fa-circle"></i> BME280 vs AHT20</span>
@@ -224,13 +269,24 @@
         </div>
 
         <!-- Soil Moisture Waveform -->
-        <div class="chart-card full-width">
+        <div class="chart-card full-width" id="card-chart-soil">
           <div class="chart-card-header">
             <h3><i class="fa-solid fa-water color-cap"></i> Soil Moisture Comparison</h3>
             <span class="timestamp-label" id="last-update-time">Waiting for stream...</span>
           </div>
           <div class="chart-container">
             <canvas id="soilMoistureChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Atmospheric Pressure Waveform -->
+        <div class="chart-card full-width" id="card-chart-press">
+          <div class="chart-card-header">
+            <h3><i class="fa-solid fa-gauge-high color-press"></i> Atmospheric Pressure Waveform</h3>
+            <span class="live-pill"><i class="fa-solid fa-circle"></i> BME280 (hPa)</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="pressureChart"></canvas>
           </div>
         </div>
 
@@ -279,7 +335,217 @@
       </section>
     </div>
 
-    <!-- VIEW TAB 4: HARDWARE DIAGNOSTICS -->
+    <!-- VIEW TAB 4: BANG-BANG CONTROLLER & AUTOMATION -->
+    <div class="view-panel" id="view-control">
+      
+      <!-- CONTROLLER STATUS BANNER -->
+      <div class="control-header-banner">
+        <div class="ctrl-mode">
+          <i class="fa-solid fa-sliders color-cap"></i>
+          <div>
+            <h3>Bang-Bang Hysteresis Controller</h3>
+            <span class="subtitle">2-State Automatic Relay & Actuator Automation</span>
+          </div>
+        </div>
+        <div class="ctrl-status-badge active" id="ctrl-mode-status">
+          <span class="pulse-dot"></span> AUTO BANG-BANG ACTIVE
+        </div>
+      </div>
+
+      <!-- BANG-BANG HYSTERESIS SETTINGS GRID -->
+      <section class="control-grid">
+        
+        <!-- Irrigation Bang-Bang Control Card -->
+        <div class="control-card">
+          <div class="control-card-header">
+            <h4><i class="fa-solid fa-droplet color-cap"></i> Soil Irrigation Bang-Bang</h4>
+            <label class="switch-toggle">
+              <input type="checkbox" id="chk-auto-irrigation" checked>
+              <span class="slider round"></span>
+            </label>
+          </div>
+          <p class="ctrl-desc">Automatically toggles water pump relay when moisture crosses setpoints.</p>
+          
+          <div class="threshold-inputs">
+            <div class="thresh-group">
+              <label><i class="fa-solid fa-arrow-down color-temp"></i> Turn ON Pump Below:</label>
+              <div class="range-val-wrapper">
+                <input type="range" id="rng-moist-on" min="10" max="60" value="35" class="custom-range">
+                <span class="range-display" id="disp-moist-on">35%</span>
+              </div>
+            </div>
+            <div class="thresh-group">
+              <label><i class="fa-solid fa-arrow-up color-hum"></i> Turn OFF Pump Above:</label>
+              <div class="range-val-wrapper">
+                <input type="range" id="rng-moist-off" min="40" max="90" value="75" class="custom-range">
+                <span class="range-display" id="disp-moist-off">75%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="relay-state-indicator" id="ind-pump-relay">
+            <span>Water Pump Relay:</span>
+            <strong class="state-off" id="val-pump-relay">OFF (Moisture Normal)</strong>
+          </div>
+        </div>
+
+        <!-- Air Temperature Cooling Fan Bang-Bang Card -->
+        <div class="control-card">
+          <div class="control-card-header">
+            <h4><i class="fa-solid fa-fan color-hum"></i> Fan & Cooling Bang-Bang</h4>
+            <label class="switch-toggle">
+              <input type="checkbox" id="chk-auto-fan" checked>
+              <span class="slider round"></span>
+            </label>
+          </div>
+          <p class="ctrl-desc">Triggers ventilation fan when air temperature exceeds upper threshold.</p>
+          
+          <div class="threshold-inputs">
+            <div class="thresh-group">
+              <label><i class="fa-solid fa-arrow-up color-temp"></i> Turn ON Fan Above:</label>
+              <div class="range-val-wrapper">
+                <input type="range" id="rng-temp-on" min="25" max="45" value="32" class="custom-range">
+                <span class="range-display" id="disp-temp-on">32°C</span>
+              </div>
+            </div>
+            <div class="thresh-group">
+              <label><i class="fa-solid fa-arrow-down color-hum"></i> Turn OFF Fan Below:</label>
+              <div class="range-val-wrapper">
+                <input type="range" id="rng-temp-off" min="18" max="35" value="27" class="custom-range">
+                <span class="range-display" id="disp-temp-off">27°C</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="relay-state-indicator" id="ind-fan-relay">
+            <span>Cooling Fan Relay:</span>
+            <strong class="state-off" id="val-fan-relay">OFF (Temp Normal)</strong>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- MANUAL OVERRIDE RELAY SWITCHES GRID -->
+      <section class="manual-relays-section">
+        <h3><i class="fa-solid fa-toggle-on color-press"></i> Manual Actuator & Relay Overrides</h3>
+        <div class="relays-grid">
+          
+          <div class="relay-card" id="relay-card-1">
+            <div class="relay-icon"><i class="fa-solid fa-faucet-drip"></i></div>
+            <div class="relay-info">
+              <h5>Relay 1: Irrigation Pump</h5>
+              <span class="relay-gpio">GPIO 12 • High Current</span>
+            </div>
+            <button class="btn btn-secondary btn-sm btn-toggle-relay" data-relay="1">TOGGLE</button>
+          </div>
+
+          <div class="relay-card" id="relay-card-2">
+            <div class="relay-icon"><i class="fa-solid fa-wind"></i></div>
+            <div class="relay-info">
+              <h5>Relay 2: Exhaust Fan</h5>
+              <span class="relay-gpio">GPIO 13 • 12V PWM</span>
+            </div>
+            <button class="btn btn-secondary btn-sm btn-toggle-relay" data-relay="2">TOGGLE</button>
+          </div>
+
+          <div class="relay-card" id="relay-card-3">
+            <div class="relay-icon"><i class="fa-solid fa-fire"></i></div>
+            <div class="relay-info">
+              <h5>Relay 3: Heating Element</h5>
+              <span class="relay-gpio">GPIO 14 • Thermal Control</span>
+            </div>
+            <button class="btn btn-secondary btn-sm btn-toggle-relay" data-relay="3">TOGGLE</button>
+          </div>
+
+          <div class="relay-card" id="relay-card-4">
+            <div class="relay-icon"><i class="fa-solid fa-cloud-rain"></i></div>
+            <div class="relay-info">
+              <h5>Relay 4: Mist Solenoid</h5>
+              <span class="relay-gpio">GPIO 27 • Fogger Valve</span>
+            </div>
+            <button class="btn btn-secondary btn-sm btn-toggle-relay" data-relay="4">TOGGLE</button>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
+
+    <!-- VIEW TAB 5: ACCOUNT & MULTI-DEVICE MANAGEMENT -->
+    <div class="view-panel" id="view-settings">
+      
+      <!-- USER ACCOUNT AUTH SECTION -->
+      <section class="settings-section">
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <h3><i class="fa-solid fa-user-gear color-hum"></i> User Account & Profile</h3>
+            <span class="badge badge-optimal" id="badge-user-status">Authenticated</span>
+          </div>
+          
+          <div class="profile-info-row">
+            <div class="user-avatar"><i class="fa-solid fa-user-shield"></i></div>
+            <div class="user-details">
+              <h4 id="user-email-display">apurbamaity227@gmail.com</h4>
+              <p class="user-role">Administrator • Firebase Realtime Data Access</p>
+              <span class="token-status"><i class="fa-solid fa-key"></i> Auth Token: <strong id="user-token-status">Active (Auto-Renew)</strong></span>
+            </div>
+          </div>
+
+          <div class="account-action-buttons">
+            <button class="btn btn-secondary btn-sm" id="btn-toggle-account-form"><i class="fa-solid fa-right-to-bracket"></i> Switch / Sign In Account</button>
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-auth-token"><i class="fa-solid fa-rotate-right"></i> Refresh Security Token</button>
+          </div>
+
+          <!-- COLLAPSIBLE SIGN IN / REGISTER FORM -->
+          <div class="account-form-container hidden" id="account-form-box">
+            <h4><i class="fa-solid fa-lock"></i> Firebase Account Login</h4>
+            <div class="form-group">
+              <label>Email Address:</label>
+              <input type="email" id="input-account-email" class="custom-input" placeholder="user@example.com" value="apurbamaity227@gmail.com">
+            </div>
+            <div class="form-group">
+              <label>Password:</label>
+              <input type="password" id="input-account-pass" class="custom-input" placeholder="••••••••">
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-save-account-login"><i class="fa-solid fa-check"></i> Sign In & Save Credentials</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- MULTI-DEVICE MANAGEMENT SECTION -->
+      <section class="settings-section">
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <div class="header-left">
+              <h3><i class="fa-solid fa-microchip color-cap"></i> Device Manager (Unique ID)</h3>
+              <span class="subtitle">Multi-Device Expansion & Realtime Stream Switcher</span>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-open-add-device"><i class="fa-solid fa-plus"></i> Add New Device</button>
+          </div>
+
+          <!-- ACTIVE DEVICE CARD -->
+          <div class="active-device-banner">
+            <div class="dev-banner-left">
+              <span class="active-tag">CURRENTLY MONITORING</span>
+              <h3 id="active-device-name">ESP32 Main Suite</h3>
+              <code id="active-device-id">ID: ESP32-SOIL-AIR-01</code>
+              <p class="dev-path" id="active-device-path">Firebase Path: <code>SensorData/SoilAirSuite</code></p>
+            </div>
+            <div class="dev-banner-right">
+              <span class="badge badge-optimal">ONLINE STREAM</span>
+            </div>
+          </div>
+
+          <!-- REGISTERED DEVICES LIST GRID -->
+          <div class="devices-grid" id="devices-list-container">
+            <!-- Dynamic Device Cards Populated via app.js -->
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- VIEW TAB 6: HARDWARE DIAGNOSTICS -->
     <div class="view-panel" id="view-system">
       <section class="diagnostics-grid">
         
@@ -321,7 +587,7 @@
       <i class="fa-solid fa-file-arrow-down"></i>
     </button>
 
-    <!-- NATIVE BOTTOM NAVIGATION BAR -->
+    <!-- NATIVE 6-BUTTON BOTTOM NAVIGATION BAR -->
     <nav class="bottom-nav">
       <button class="nav-item active" data-target="view-metrics">
         <i class="fa-solid fa-gauge-high"></i>
@@ -334,6 +600,14 @@
       <button class="nav-item" data-target="view-logs">
         <i class="fa-solid fa-list-check"></i>
         <span>History</span>
+      </button>
+      <button class="nav-item" data-target="view-control">
+        <i class="fa-solid fa-toggle-on"></i>
+        <span>Control</span>
+      </button>
+      <button class="nav-item" data-target="view-settings">
+        <i class="fa-solid fa-gear"></i>
+        <span>Settings</span>
       </button>
       <button class="nav-item" data-target="view-system">
         <i class="fa-solid fa-sliders"></i>
@@ -398,20 +672,40 @@
     </div>
   </div>
 
-  <!-- CSV TEXT COPY FALLBACK MODAL -->
-  <div class="modal-overlay hidden" id="csv-copy-modal">
+  <!-- ADD NEW DEVICE MODAL -->
+  <div class="modal-overlay hidden" id="add-device-modal">
     <div class="modal-card">
       <div class="modal-header">
-        <h3><i class="fa-solid fa-copy color-cap"></i> Copy CSV Telemetry Data</h3>
-        <button class="modal-close" id="btn-close-copy-modal"><i class="fa-solid fa-xmark"></i></button>
+        <h3><i class="fa-solid fa-microchip color-cap"></i> Add New Hardware Device</h3>
+        <button class="modal-close" id="btn-close-device-modal"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body">
-        <label class="modal-label">Your CSV Data is Ready Below:</label>
-        <textarea id="csv-text-area" class="csv-textarea" readonly></textarea>
+        <div class="form-group mb-3">
+          <label class="modal-label">Device Friendly Name:</label>
+          <input type="text" id="new-dev-name" class="custom-input" placeholder="e.g. Polyhouse Sensor Node 2">
+        </div>
+        <div class="form-group mb-3">
+          <label class="modal-label">Unique Device ID (Required):</label>
+          <input type="text" id="new-dev-id" class="custom-input" placeholder="e.g. ESP32-GREENHOUSE-02">
+        </div>
+        <div class="form-group mb-3">
+          <label class="modal-label">Hardware Type / Board:</label>
+          <select id="new-dev-type" class="custom-select full-width-select">
+            <option value="ESP32">ESP32 (Wi-Fi + BLE)</option>
+            <option value="ESP8266">ESP8266 NodeMCU</option>
+            <option value="Arduino">Arduino + Ethernet/SIM800L</option>
+            <option value="STM32">STM32 / LoRaWAN Node</option>
+            <option value="RPi">Raspberry Pi Gateway</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="modal-label">Firebase Realtime Data Subpath:</label>
+          <input type="text" id="new-dev-path" class="custom-input" placeholder="SensorData/Greenhouse02">
+        </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="btn-cancel-copy">Close</button>
-        <button class="btn btn-primary" id="btn-copy-csv-text"><i class="fa-solid fa-clipboard"></i> 1-Tap Copy CSV</button>
+        <button class="btn btn-secondary" id="btn-cancel-device">Cancel</button>
+        <button class="btn btn-primary" id="btn-save-new-device"><i class="fa-solid fa-plus"></i> Register Device</button>
       </div>
     </div>
   </div>
