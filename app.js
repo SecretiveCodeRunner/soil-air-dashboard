@@ -17,6 +17,9 @@ async function getFirebaseIdToken() {
     return firebaseIdToken;
   }
 
+  const customEmail = localStorage.getItem("soil_air_user_email") || FIREBASE_USER_EMAIL;
+  const customPass = localStorage.getItem("soil_air_user_pass") || FIREBASE_USER_PASSWORD;
+
   try {
     const authRes = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
@@ -24,8 +27,8 @@ async function getFirebaseIdToken() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: FIREBASE_USER_EMAIL,
-          password: FIREBASE_USER_PASSWORD,
+          email: customEmail,
+          password: customPass,
           returnSecureToken: true
         })
       }
@@ -39,6 +42,10 @@ async function getFirebaseIdToken() {
     firebaseIdToken = authData.idToken;
     const expiresIn = parseInt(authData.expiresIn || "3600", 10);
     firebaseTokenExpiry = Date.now() + expiresIn * 1000;
+
+    const elUserEmail = document.getElementById("user-email-display");
+    if (elUserEmail) elUserEmail.textContent = customEmail;
+
     return firebaseIdToken;
   } catch (err) {
     console.error("Firebase Auth Error:", err);
@@ -117,6 +124,7 @@ const viewPanels = document.querySelectorAll(".view-panel");
 // ============================================================================
 document.addEventListener("DOMContentLoaded", () => {
   initNavigation();
+  initThemeSwitcher();
   initCharts();
   initTimelineControls();
   initCsvModalControls();
@@ -771,7 +779,12 @@ async function fetchTelemetryData() {
 }
 
 function processFirebaseData(data) {
-  if (!data) return;
+  if (!data) {
+    rawTelemetryHistory = [];
+    filteredHistory = [];
+    updateEmptyDeviceState();
+    return;
+  }
 
   let historyList = [];
   if (data.History) {
@@ -790,8 +803,59 @@ function processFirebaseData(data) {
 
   if (historyList.length > 0) {
     rawTelemetryHistory = historyList;
+    const elStatusBox = document.getElementById("active-device-status-box");
+    if (elStatusBox) {
+      elStatusBox.innerHTML = `<span class="badge badge-optimal">ONLINE STREAM</span>`;
+    }
     applyTimeFilter();
+  } else {
+    rawTelemetryHistory = [];
+    filteredHistory = [];
+    updateEmptyDeviceState();
   }
+}
+
+function updateEmptyDeviceState() {
+  const cur = (typeof registeredDevices !== 'undefined') ? (registeredDevices.find(d => d.id === activeDeviceId) || registeredDevices[0]) : null;
+  const devName = cur ? cur.name : activeDeviceId;
+  const devPath = cur ? cur.path : activeDeviceId;
+
+  setConnectionState("offline", `No Hardware Stream • Waiting for data at ${devPath}`);
+  updateHeartbeatUI(false, "NO HARDWARE STREAM", `No data on path ${devPath}`, "badge-stale");
+
+  const elStatusBox = document.getElementById("active-device-status-box");
+  if (elStatusBox) {
+    elStatusBox.innerHTML = `<span class="badge badge-stale"><i class="fa-solid fa-plug-circle-xmark"></i> NO STREAM YET</span>`;
+  }
+
+  if (elBmeTemp) elBmeTemp.innerHTML = `-- <span class="unit">°C</span>`;
+  if (elAhtTemp) elAhtTemp.innerHTML = `-- <span class="unit">°C</span>`;
+  if (elSoilTemp) elSoilTemp.innerHTML = `-- <span class="unit">°C</span>`;
+  if (elBmeHum) elBmeHum.innerHTML = `-- <span class="unit">%</span>`;
+  if (elAhtHum) elAhtHum.innerHTML = `-- <span class="unit">%</span>`;
+  if (elCapMoist) elCapMoist.innerHTML = `-- <span class="unit">%</span>`;
+  if (elResMoist) elResMoist.innerHTML = `-- <span class="unit">%</span>`;
+  if (elCapRaw) elCapRaw.textContent = "--";
+  if (elResRaw) elResRaw.textContent = "--";
+  if (elBmePress) elBmePress.innerHTML = `-- <span class="unit">hPa</span>`;
+
+  const setElText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+  ["bme-temp", "aht-temp", "soil-temp", "bme-hum", "aht-hum", "cap-moist", "res-moist", "bme-press"].forEach(k => {
+    setElText(`max-${k}`, "--");
+    setElText(`min-${k}`, "--");
+  });
+
+  if (elRecordsCount) elRecordsCount.textContent = `0 Records Loaded (No Hardware Stream)`;
+  if (elLastUpdate) elLastUpdate.textContent = `Waiting for stream at ${devPath}...`;
+  if (elTableBody) elTableBody.innerHTML = `<tr><td colspan="9" class="empty-state">No hardware telemetry recorded for <strong>${devName} (${activeDeviceId})</strong> yet.<br>Connect physical hardware to publish to Firebase path: <code>${devPath}</code></td></tr>`;
+
+  if (temperatureChart) { temperatureChart.data.labels = []; temperatureChart.data.datasets.forEach(d => d.data = []); temperatureChart.update(); }
+  if (humidityChart) { humidityChart.data.labels = []; humidityChart.data.datasets.forEach(d => d.data = []); humidityChart.update(); }
+  if (soilMoistureChart) { soilMoistureChart.data.labels = []; soilMoistureChart.data.datasets.forEach(d => d.data = []); soilMoistureChart.update(); }
+  if (pressureChart) { pressureChart.data.labels = []; pressureChart.data.datasets.forEach(d => d.data = []); pressureChart.update(); }
 }
 
 async function fetchAhtFallbackData() {
@@ -1380,6 +1444,11 @@ function initMultiDeviceManager() {
   const accFormBox = document.getElementById("account-form-box");
   const btnSaveAcc = document.getElementById("btn-save-account-login");
   const btnRefreshAuth = document.getElementById("btn-refresh-auth-token");
+  const btnSignOut = document.getElementById("btn-signout-account");
+
+  const storedUserEmail = localStorage.getItem("soil_air_user_email") || FIREBASE_USER_EMAIL;
+  const elUserEmailDisp = document.getElementById("user-email-display");
+  if (elUserEmailDisp) elUserEmailDisp.textContent = storedUserEmail;
 
   if (btnToggleAcc && accFormBox) {
     btnToggleAcc.addEventListener("click", () => {
@@ -1389,22 +1458,38 @@ function initMultiDeviceManager() {
 
   if (btnSaveAcc) {
     btnSaveAcc.addEventListener("click", async () => {
-      const email = document.getElementById("input-account-email")?.value;
-      const pass = document.getElementById("input-account-pass")?.value;
+      const email = document.getElementById("input-account-email")?.value.trim();
+      const pass = document.getElementById("input-account-pass")?.value.trim();
       if (!email || !pass) {
         alert("Please enter both email and password.");
         return;
       }
+      localStorage.setItem("soil_air_user_email", email);
+      localStorage.setItem("soil_air_user_pass", pass);
       firebaseIdToken = null;
-      alert(`Saved account credentials for ${email}. Re-authenticating with Firebase...`);
+
       const t = await getFirebaseIdToken();
       if (t) {
-        document.getElementById("user-email-display").textContent = email;
+        if (elUserEmailDisp) elUserEmailDisp.textContent = email;
+        const badgeUser = document.getElementById("badge-user-status");
+        if (badgeUser) { badgeUser.textContent = "Authenticated"; badgeUser.className = "badge badge-optimal"; }
         accFormBox.classList.add("hidden");
-        alert("Successfully authenticated with Firebase!");
+        alert(`Successfully authenticated as ${email}!`);
       } else {
-        alert("Authentication failed. Please verify credentials.");
+        alert("Authentication failed. Please verify email and password.");
       }
+    });
+  }
+
+  if (btnSignOut) {
+    btnSignOut.addEventListener("click", () => {
+      localStorage.removeItem("soil_air_user_email");
+      localStorage.removeItem("soil_air_user_pass");
+      firebaseIdToken = null;
+      if (elUserEmailDisp) elUserEmailDisp.textContent = "Guest / Unauthenticated";
+      const badgeUser = document.getElementById("badge-user-status");
+      if (badgeUser) { badgeUser.textContent = "Guest Mode"; badgeUser.className = "badge badge-stale"; }
+      alert("Signed out of custom Firebase account session.");
     });
   }
 
@@ -1524,4 +1609,53 @@ function updateActiveDeviceBanner() {
   if (elName) elName.textContent = cur.name;
   if (elId) elId.textContent = `ID: ${cur.id}`;
   if (elPath) elPath.innerHTML = `Firebase Path: <code>${cur.path}</code>`;
+}
+
+// ============================================================================
+// APP THEME & VISUAL APPEARANCE ENGINE
+// ============================================================================
+function initThemeSwitcher() {
+  const savedTheme = localStorage.getItem("soil_air_theme") || "dark";
+  applyAppTheme(savedTheme);
+
+  const themeBtns = document.querySelectorAll(".btn-theme-select");
+  themeBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      themeBtns.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const chosenTheme = btn.getAttribute("data-theme");
+      applyAppTheme(chosenTheme);
+    });
+  });
+}
+
+function applyAppTheme(themeName) {
+  localStorage.setItem("soil_air_theme", themeName);
+  const badge = document.getElementById("badge-theme-mode");
+
+  const themeBtns = document.querySelectorAll(".btn-theme-select");
+  themeBtns.forEach(b => {
+    if (b.getAttribute("data-theme") === themeName) {
+      b.classList.add("active");
+    } else {
+      b.classList.remove("active");
+    }
+  });
+
+  if (themeName === "light") {
+    document.body.classList.add("theme-light");
+    if (badge) badge.textContent = "Crisp White";
+  } else if (themeName === "system") {
+    const prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+    if (prefersLight) {
+      document.body.classList.add("theme-light");
+      if (badge) badge.textContent = "System (Light)";
+    } else {
+      document.body.classList.remove("theme-light");
+      if (badge) badge.textContent = "System (Dark)";
+    }
+  } else {
+    document.body.classList.remove("theme-light");
+    if (badge) badge.textContent = "Dark Theme";
+  }
 }

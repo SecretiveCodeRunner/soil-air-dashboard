@@ -471,14 +471,37 @@
 
     </div>
 
-    <!-- VIEW TAB 5: ACCOUNT & MULTI-DEVICE MANAGEMENT -->
+    <!-- VIEW TAB 5: SETTINGS, THEME, ACCOUNTS, MULTI-DEVICE & DIAGNOSTICS -->
     <div class="view-panel" id="view-settings">
       
+      <!-- APP THEME & APPEARANCE PREFERENCES SECTION -->
+      <section class="settings-section">
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <h3><i class="fa-solid fa-palette color-press"></i> Appearance & Theme Mode</h3>
+            <span class="badge badge-normal" id="badge-theme-mode">Dark Theme</span>
+          </div>
+          <p class="ctrl-desc">Choose your preferred visual theme interface for daytime & nighttime readability.</p>
+          
+          <div class="theme-toggle-group" id="theme-selector-group">
+            <button class="btn btn-secondary btn-theme-select active" data-theme="dark">
+              <i class="fa-solid fa-moon"></i> Dark Theme
+            </button>
+            <button class="btn btn-secondary btn-theme-select" data-theme="light">
+              <i class="fa-solid fa-sun"></i> Crisp White
+            </button>
+            <button class="btn btn-secondary btn-theme-select" data-theme="system">
+              <i class="fa-solid fa-desktop"></i> System Default
+            </button>
+          </div>
+        </div>
+      </section>
+
       <!-- USER ACCOUNT AUTH SECTION -->
       <section class="settings-section">
         <div class="settings-card">
           <div class="settings-card-header">
-            <h3><i class="fa-solid fa-user-gear color-hum"></i> User Account & Profile</h3>
+            <h3><i class="fa-solid fa-user-gear color-hum"></i> User Account & Authentication</h3>
             <span class="badge badge-optimal" id="badge-user-status">Authenticated</span>
           </div>
           
@@ -486,28 +509,30 @@
             <div class="user-avatar"><i class="fa-solid fa-user-shield"></i></div>
             <div class="user-details">
               <h4 id="user-email-display">apurbamaity227@gmail.com</h4>
-              <p class="user-role">Administrator • Firebase Realtime Data Access</p>
+              <p class="user-role">Administrator • Firebase Security Access</p>
               <span class="token-status"><i class="fa-solid fa-key"></i> Auth Token: <strong id="user-token-status">Active (Auto-Renew)</strong></span>
             </div>
           </div>
 
           <div class="account-action-buttons">
-            <button class="btn btn-secondary btn-sm" id="btn-toggle-account-form"><i class="fa-solid fa-right-to-bracket"></i> Switch / Sign In Account</button>
+            <button class="btn btn-secondary btn-sm" id="btn-toggle-account-form"><i class="fa-solid fa-right-to-bracket"></i> Login / Register Account</button>
             <button class="btn btn-secondary btn-sm" id="btn-refresh-auth-token"><i class="fa-solid fa-rotate-right"></i> Refresh Security Token</button>
+            <button class="btn btn-secondary btn-sm" id="btn-signout-account"><i class="fa-solid fa-right-from-bracket"></i> Sign Out</button>
           </div>
 
           <!-- COLLAPSIBLE SIGN IN / REGISTER FORM -->
           <div class="account-form-container hidden" id="account-form-box">
-            <h4><i class="fa-solid fa-lock"></i> Firebase Account Login</h4>
+            <h4><i class="fa-solid fa-lock"></i> Firebase Multi-User Authentication Login</h4>
+            <p class="form-help-text">Enter any valid Firebase User email and password registered on your Firebase Auth console to sign in.</p>
             <div class="form-group">
-              <label>Email Address:</label>
+              <label>Firebase Account Email:</label>
               <input type="email" id="input-account-email" class="custom-input" placeholder="user@example.com" value="apurbamaity227@gmail.com">
             </div>
             <div class="form-group">
-              <label>Password:</label>
+              <label>Firebase Password:</label>
               <input type="password" id="input-account-pass" class="custom-input" placeholder="••••••••">
             </div>
-            <button class="btn btn-primary btn-sm" id="btn-save-account-login"><i class="fa-solid fa-check"></i> Sign In & Save Credentials</button>
+            <button class="btn btn-primary btn-sm" id="btn-save-account-login"><i class="fa-solid fa-check"></i> Sign In & Save Session</button>
           </div>
         </div>
       </section>
@@ -517,10 +542,10 @@
         <div class="settings-card">
           <div class="settings-card-header">
             <div class="header-left">
-              <h3><i class="fa-solid fa-microchip color-cap"></i> Device Manager (Unique ID)</h3>
-              <span class="subtitle">Multi-Device Expansion & Realtime Stream Switcher</span>
+              <h3><i class="fa-solid fa-microchip color-cap"></i> Multi-Device Manager</h3>
+              <span class="subtitle">Switch Active Stream or Register New Hardware Nodes</span>
             </div>
-            <button class="btn btn-primary btn-sm" id="btn-open-add-device"><i class="fa-solid fa-plus"></i> Add New Device</button>
+            <button class="btn btn-primary btn-sm" id="btn-open-add-device"><i class="fa-solid fa-plus"></i> Add Device ID</button>
           </div>
 
           <!-- ACTIVE DEVICE CARD -->
@@ -531,7 +556,7 @@
               <code id="active-device-id">ID: ESP32-SOIL-AIR-01</code>
               <p class="dev-path" id="active-device-path">Firebase Path: <code>SensorData/SoilAirSuite</code></p>
             </div>
-            <div class="dev-banner-right">
+            <div class="dev-banner-right" id="active-device-status-box">
               <span class="badge badge-optimal">ONLINE STREAM</span>
             </div>
           </div>
@@ -543,43 +568,48 @@
         </div>
       </section>
 
-    </div>
+      <!-- INCORPORATED HARDWARE & CLOUD DIAGNOSTICS SECTION -->
+      <section class="settings-section">
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <h3><i class="fa-solid fa-sliders color-temp"></i> Hardware & System Diagnostics</h3>
+            <span class="badge badge-normal">Health Monitor</span>
+          </div>
+          
+          <div class="diagnostics-grid">
+            <div class="diag-card">
+              <div class="diag-icon color-temp" id="diag-esp-icon"><i class="fa-solid fa-microchip"></i></div>
+              <div class="diag-info">
+                <h3>ESP32 Power Detection</h3>
+                <p class="diag-detail">State: <span class="badge badge-normal" id="diag-esp-badge">CHECKING...</span></p>
+                <p class="diag-detail">Heartbeat: <strong>35 Seconds</strong></p>
+                <p class="diag-detail">Last Sync Age: <strong id="diag-last-age">--</strong></p>
+              </div>
+            </div>
 
-    <!-- VIEW TAB 6: HARDWARE DIAGNOSTICS -->
-    <div class="view-panel" id="view-system">
-      <section class="diagnostics-grid">
-        
-        <div class="diag-card">
-          <div class="diag-icon color-temp" id="diag-esp-icon"><i class="fa-solid fa-microchip"></i></div>
-          <div class="diag-info">
-            <h3>ESP32 Active Power Detection</h3>
-            <p class="diag-detail">State: <span class="badge badge-normal" id="diag-esp-badge">CHECKING...</span></p>
-            <p class="diag-detail">Heartbeat Window: <strong>35 Seconds</strong></p>
-            <p class="diag-detail">Last Sync Age: <strong id="diag-last-age">--</strong></p>
+            <div class="diag-card">
+              <div class="diag-icon color-cap"><i class="fa-solid fa-sd-card"></i></div>
+              <div class="diag-info">
+                <h3>MicroSD Datalogger</h3>
+                <p class="diag-detail">Interval: <strong>10 Seconds</strong></p>
+                <p class="diag-detail">CSV Path: <code>/unified_dual_air_soil_log.csv</code></p>
+                <p class="diag-detail">Status: <span class="badge badge-normal" id="diag-sd-badge">CHECKING</span></p>
+              </div>
+            </div>
+
+            <div class="diag-card">
+              <div class="diag-icon color-hum"><i class="fa-solid fa-fire-flame-curved"></i></div>
+              <div class="diag-info">
+                <h3>Firebase RTDB Endpoint</h3>
+                <p class="diag-detail">Database: <code>esp32-soil-and-air-default-rtdb</code></p>
+                <p class="diag-detail">Push Rate: <strong>10 Seconds</strong></p>
+                <p class="diag-detail">Auth: <span class="badge badge-optimal">ACTIVE</span></p>
+              </div>
+            </div>
           </div>
         </div>
-
-        <div class="diag-card">
-          <div class="diag-icon color-cap"><i class="fa-solid fa-sd-card"></i></div>
-          <div class="diag-info">
-            <h3>MicroSD CSV Datalogger</h3>
-            <p class="diag-detail">Log Frequency: <strong>10 Seconds</strong></p>
-            <p class="diag-detail">File Path: <code>/unified_dual_air_soil_log.csv</code></p>
-            <p class="diag-detail">Status: <span class="badge badge-normal" id="diag-sd-badge">CHECKING</span></p>
-          </div>
-        </div>
-
-        <div class="diag-card">
-          <div class="diag-icon color-hum"><i class="fa-solid fa-fire-flame-curved"></i></div>
-          <div class="diag-info">
-            <h3>Firebase Realtime Database</h3>
-            <p class="diag-detail">Endpoint: <code>esp32-soil-and-air-default-rtdb</code></p>
-            <p class="diag-detail">Push Rate: <strong>10 Seconds</strong></p>
-            <p class="diag-detail">Cloud Auth: <span class="badge badge-optimal">CONNECTED</span></p>
-          </div>
-        </div>
-
       </section>
+
     </div>
 
     <!-- FLOATING ACTION BUTTON (FAB) FOR CSV EXPORT -->
@@ -587,7 +617,7 @@
       <i class="fa-solid fa-file-arrow-down"></i>
     </button>
 
-    <!-- NATIVE 6-BUTTON BOTTOM NAVIGATION BAR -->
+    <!-- NATIVE 5-BUTTON BOTTOM NAVIGATION BAR -->
     <nav class="bottom-nav">
       <button class="nav-item active" data-target="view-metrics">
         <i class="fa-solid fa-gauge-high"></i>
@@ -608,10 +638,6 @@
       <button class="nav-item" data-target="view-settings">
         <i class="fa-solid fa-gear"></i>
         <span>Settings</span>
-      </button>
-      <button class="nav-item" data-target="view-system">
-        <i class="fa-solid fa-sliders"></i>
-        <span>Diagnostics</span>
       </button>
     </nav>
 
