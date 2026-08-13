@@ -502,9 +502,10 @@ function parseRecordTimestampMs(r) {
 }
 
 // ============================================================================
-// DYNAMIC ESP32 POWER & HEARTBEAT STALENESS ENGINE (30s Active Check)
+// DYNAMIC ESP32 POWER & HEARTBEAT STALENESS ENGINE
 // ============================================================================
-let lastFirebaseFetchTime = 0;
+let lastRecordReceivedTime = 0;
+let lastKnownLiveStamp = null;
 
 function checkEspHeartbeatStatus(latestRecord) {
   if (!latestRecord) {
@@ -513,37 +514,39 @@ function checkEspHeartbeatStatus(latestRecord) {
     return;
   }
 
-  const isCloudPollingActive = (Date.now() - lastFirebaseFetchTime) < 15000;
-  const recordTimeMs = parseRecordTimestampMs(latestRecord);
-  const nowMs = Date.now();
+  const currentStamp = latestRecord.Timestamp || latestRecord.Time || JSON.stringify(latestRecord);
+  
+  // Track when a NEW live record payload actually arrives from the ESP32
+  if (lastKnownLiveStamp !== null && lastKnownLiveStamp !== currentStamp) {
+    lastRecordReceivedTime = Date.now();
+  }
+  lastKnownLiveStamp = currentStamp;
 
-  let timeString = latestRecord.Time || "";
+  let timeString = latestRecord._rawTime || latestRecord.Time || "";
   if (!timeString && latestRecord.Timestamp) {
     const parts = latestRecord.Timestamp.split("T");
     if (parts.length > 1) timeString = parts[1].replace("Z", "");
   }
 
-  if (recordTimeMs === 0) {
-    setConnectionState("online", "ESP32 Live Stream Active");
-    updateHeartbeatUI(true, "ACTIVE", timeString || "Just now", "badge-optimal");
-    return;
-  }
+  const isTransmittingNow = (lastRecordReceivedTime > 0) && (Date.now() - lastRecordReceivedTime < 45000);
 
-  const ageMs = Math.abs(nowMs - recordTimeMs);
-  const ageSec = Math.floor(ageMs / 1000);
-  const ageMin = Math.floor(ageSec / 60);
-  const ageHours = Math.floor(ageMin / 60);
-
-  // If Firebase is delivering fresh data responses OR if payload timestamp is recent
-  if (isCloudPollingActive || ageSec <= 120) {
+  if (isTransmittingNow) {
+    // 🟢 ESP32 IS ON AND TRANSMITTING LIVE
     setConnectionState("online", "ESP32 Live Stream Active");
     updateHeartbeatUI(true, "ACTIVE (Transmitting)", `Live (${timeString || "Just now"})`, "badge-optimal");
   } else {
-    let agoText = ageMin < 60 ? `${ageMin}m ago` : `${ageHours}h ${ageMin % 60}m ago`;
-    const lastTimeDisplay = timeString ? `${timeString} (${agoText})` : agoText;
+    // 🔴 ESP32 IS OFF / INACTIVE (Displaying Previous History)
+    let agoText = "Offline";
+    const recordMs = parseRecordTimestampMs(latestRecord);
+    if (recordMs > 0) {
+      const ageMin = Math.floor(Math.abs(Date.now() - recordMs) / 60000);
+      const ageHours = Math.floor(ageMin / 60);
+      agoText = ageMin < 60 ? `${ageMin}m ago` : `${ageHours}h ${ageMin % 60}m ago`;
+    }
     
-    setConnectionState("offline", `Offline • Last logged at ${lastTimeDisplay}`);
-    updateHeartbeatUI(false, `INACTIVE (Last logged ${timeString || agoText})`, `Last logged: ${lastTimeDisplay}`, "badge-err");
+    const lastTimeDisplay = timeString ? `${timeString} (${agoText})` : agoText;
+    setConnectionState("offline", `Offline • Last logged: ${lastTimeDisplay}`);
+    updateHeartbeatUI(false, `INACTIVE (${agoText})`, `Last logged: ${lastTimeDisplay}`, "badge-err");
   }
 }
 
@@ -579,7 +582,7 @@ function setConnectionState(stateClass, message) {
   if (elStatusText) elStatusText.textContent = message;
   if (!elStatusBadge) return;
 
-  elStatusBadge.className = "status-badge";
+  elStatusBadge.className = "connection-badge";
   if (stateClass) elStatusBadge.classList.add(stateClass);
 }
 
