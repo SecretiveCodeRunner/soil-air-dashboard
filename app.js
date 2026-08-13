@@ -839,15 +839,13 @@ function processFirebaseData(data) {
     }
   }
 
-  // Sort historical logs chronologically
-  historyList.sort((a, b) => parseRecordTimestampMs(a) - parseRecordTimestampMs(b));
-
+  // Preserve natural Firebase push order (Firebase push keys are chronologically monotonic)
   // 4. Append .Live record if present (ALWAYS place at end of array as absolute latest)
   if (data.Live && typeof data.Live === "object") {
     const liveRec = { ...data.Live };
     if (!liveRec.Date || liveRec.Date.startsWith("2000") || liveRec.Date.startsWith("1970")) {
       liveRec._rawTime = liveRec.Time;
-      liveRec.Timestamp = new Date().toISOString();
+      liveRec._unsyncedRtc = true;
     }
     const lastHistStamp = historyList.length > 0 ? (historyList[historyList.length - 1].Timestamp || historyList[historyList.length - 1].Time) : null;
     if (!lastHistStamp || lastHistStamp !== (liveRec.Timestamp || liveRec.Time)) {
