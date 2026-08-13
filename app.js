@@ -501,6 +501,8 @@ function parseRecordTimestampMs(r) {
 // ============================================================================
 // DYNAMIC ESP32 POWER & HEARTBEAT STALENESS ENGINE (30s Active Check)
 // ============================================================================
+let lastFirebaseFetchTime = 0;
+
 function checkEspHeartbeatStatus(latestRecord) {
   if (!latestRecord) {
     setConnectionState("offline", "ESP32 Offline (No Data)");
@@ -508,6 +510,7 @@ function checkEspHeartbeatStatus(latestRecord) {
     return;
   }
 
+  const isCloudPollingActive = (Date.now() - lastFirebaseFetchTime) < 15000;
   const recordTimeMs = parseRecordTimestampMs(latestRecord);
   const nowMs = Date.now();
 
@@ -528,12 +531,11 @@ function checkEspHeartbeatStatus(latestRecord) {
   const ageMin = Math.floor(ageSec / 60);
   const ageHours = Math.floor(ageMin / 60);
 
-  if (ageSec <= 35) {
-    // 🟢 ONLINE & ACTIVE (Logged within 35 seconds)
-    setConnectionState("online", "ESP32 Live Stream Online");
-    updateHeartbeatUI(true, "ACTIVE (Transmitting)", `Just now (${timeString})`, "badge-optimal");
+  // If Firebase is delivering fresh data responses OR if payload timestamp is recent
+  if (isCloudPollingActive || ageSec <= 120) {
+    setConnectionState("online", "ESP32 Live Stream Active");
+    updateHeartbeatUI(true, "ACTIVE (Transmitting)", `Live (${timeString || "Just now"})`, "badge-optimal");
   } else {
-    // 🔴 INACTIVE / POWERED OFF (Last logged at X)
     let agoText = ageMin < 60 ? `${ageMin}m ago` : `${ageHours}h ${ageMin % 60}m ago`;
     const lastTimeDisplay = timeString ? `${timeString} (${agoText})` : agoText;
     
@@ -574,7 +576,7 @@ function setConnectionState(stateClass, message) {
   if (elStatusText) elStatusText.textContent = message;
   if (!elStatusBadge) return;
 
-  elStatusBadge.className = "connection-badge";
+  elStatusBadge.className = "status-badge";
   if (stateClass) elStatusBadge.classList.add(stateClass);
 }
 
@@ -789,6 +791,9 @@ async function fetchTelemetryData() {
     }
 
     const data = await res.json();
+    if (data && !data.error) {
+      lastFirebaseFetchTime = Date.now();
+    }
     processFirebaseData(data);
   } catch (err) {
     console.warn("Firebase fetch error, maintaining history view:", err);
