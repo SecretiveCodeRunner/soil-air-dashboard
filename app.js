@@ -21,7 +21,7 @@ async function getFirebaseIdToken() {
   const customPass = localStorage.getItem("soil_air_user_pass") || FIREBASE_USER_PASSWORD;
 
   try {
-    const authRes = await fetch(
+    let authRes = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
       {
         method: "POST",
@@ -35,40 +35,34 @@ async function getFirebaseIdToken() {
     );
 
     if (!authRes.ok) {
-      // Fallback to default administrator account if custom credentials fail
-      if (customEmail !== FIREBASE_USER_EMAIL) {
-        console.warn("Custom credentials failed, falling back to default admin authentication...");
-        const adminRes = await fetch(
-          `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: FIREBASE_USER_EMAIL,
-              password: FIREBASE_USER_PASSWORD,
-              returnSecureToken: true
-            })
-          }
-        );
-        if (adminRes.ok) {
-          const adminData = await adminRes.json();
-          firebaseIdToken = adminData.idToken;
-          firebaseTokenExpiry = Date.now() + parseInt(adminData.expiresIn || "3600", 10) * 1000;
-          return firebaseIdToken;
+      console.warn("Custom user authentication failed, trying default admin credentials...");
+      authRes = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: FIREBASE_USER_EMAIL,
+            password: FIREBASE_USER_PASSWORD,
+            returnSecureToken: true
+          })
         }
-      }
-      throw new Error(`Auth HTTP ${authRes.status}`);
+      );
     }
 
-    const authData = await authRes.json();
-    firebaseIdToken = authData.idToken;
-    const expiresIn = parseInt(authData.expiresIn || "3600", 10);
-    firebaseTokenExpiry = Date.now() + expiresIn * 1000;
+    if (authRes.ok) {
+      const authData = await authRes.json();
+      firebaseIdToken = authData.idToken;
+      const expiresIn = parseInt(authData.expiresIn || "3600", 10);
+      firebaseTokenExpiry = Date.now() + expiresIn * 1000;
 
-    const elUserEmail = document.getElementById("user-email-display");
-    if (elUserEmail) elUserEmail.textContent = customEmail;
+      const elUserEmail = document.getElementById("user-email-display");
+      if (elUserEmail) elUserEmail.textContent = customEmail;
 
-    return firebaseIdToken;
+      return firebaseIdToken;
+    }
+
+    throw new Error(`Auth failed with status ${authRes.status}`);
   } catch (err) {
     console.error("Firebase Auth Error:", err);
     return null;
@@ -78,6 +72,49 @@ async function getFirebaseIdToken() {
 // Telemetry State
 let rawTelemetryHistory = [];
 let filteredHistory = [];
+
+// ============================================================================
+// RESILIENT FIREBASE POLLING ENGINE
+// ============================================================================
+async function startFirebasePolling() {
+  await fetchTelemetryData();
+  setInterval(fetchTelemetryData, 3000);
+}
+
+async function fetchTelemetryData() {
+  if (isDemoActive) return;
+
+  try {
+    const token = await getFirebaseIdToken();
+    const fetchUrl = token ? `${activeFirebaseSuiteUrl}?auth=${token}` : activeFirebaseSuiteUrl;
+    const res = await fetch(fetchUrl);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && !data.error) {
+        processFirebaseData(data);
+        return;
+      }
+    } else {
+      console.warn("Firebase HTTP status:", res.status);
+    }
+
+    if (rawTelemetryHistory.length > 0) {
+      applyTimeFilter();
+    } else {
+      setConnectionState("offline", "Offline • Firebase Cloud Error");
+    }
+  } catch (err) {
+    console.warn("Firebase fetch error, maintaining history view:", err);
+    if (rawTelemetryHistory.length > 0) {
+      applyTimeFilter();
+    } else {
+      setConnectionState("offline", "Offline • Network Connection Error");
+    }
+  }
+}
+
+// Telemetry State
 let activeRangeMode = "24h";
 let isDemoActive = false;
 let demoIntervalTimer = null;
