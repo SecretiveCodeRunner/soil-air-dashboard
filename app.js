@@ -35,6 +35,28 @@ async function getFirebaseIdToken() {
     );
 
     if (!authRes.ok) {
+      // Fallback to default administrator account if custom credentials fail
+      if (customEmail !== FIREBASE_USER_EMAIL) {
+        console.warn("Custom credentials failed, falling back to default admin authentication...");
+        const adminRes = await fetch(
+          `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: FIREBASE_USER_EMAIL,
+              password: FIREBASE_USER_PASSWORD,
+              returnSecureToken: true
+            })
+          }
+        );
+        if (adminRes.ok) {
+          const adminData = await adminRes.json();
+          firebaseIdToken = adminData.idToken;
+          firebaseTokenExpiry = Date.now() + parseInt(adminData.expiresIn || "3600", 10) * 1000;
+          return firebaseIdToken;
+        }
+      }
       throw new Error(`Auth HTTP ${authRes.status}`);
     }
 
@@ -779,18 +801,35 @@ async function fetchTelemetryData() {
 }
 
 function processFirebaseData(data) {
-  if (!data) {
-    rawTelemetryHistory = [];
-    filteredHistory = [];
-    updateEmptyDeviceState();
+  if (!data || data.error) {
+    console.warn("Firebase returned error or null:", data?.error);
+    if (rawTelemetryHistory.length === 0) {
+      updateEmptyDeviceState();
+    }
     return;
   }
 
   let historyList = [];
-  if (data.History) {
+
+  // 1. Check if data contains .History object wrapper
+  if (data.History && typeof data.History === "object") {
     historyList = Object.values(data.History);
+  } 
+  // 2. Check if data is a direct Array
+  else if (Array.isArray(data)) {
+    historyList = [...data];
+  } 
+  // 3. Check if data is a direct push-ID map: {"-Oz1...": {...}, "-Oz2...": {...}}
+  else if (typeof data === "object") {
+    const vals = Object.values(data).filter(v => v && typeof v === "object");
+    const sample = vals[0];
+    if (sample && (sample.BME_AirTemp_C !== undefined || sample.AirTemp_C !== undefined || sample.AHT_AirTemp_C !== undefined || sample.Timestamp || sample.Time || sample.SoilTemp_C !== undefined)) {
+      historyList = vals;
+    }
   }
-  if (data.Live) {
+
+  // 4. Append .Live record if present and not duplicate
+  if (data.Live && typeof data.Live === "object") {
     const liveStamp = data.Live.Timestamp || data.Live.Time;
     const lastHistStamp = historyList.length > 0 ? (historyList[historyList.length - 1].Timestamp || historyList[historyList.length - 1].Time) : null;
     if (!lastHistStamp || lastHistStamp !== liveStamp) {
@@ -801,6 +840,9 @@ function processFirebaseData(data) {
     }
   }
 
+  // Sort history chronologically by timestamp
+  historyList.sort((a, b) => parseRecordTimestampMs(a) - parseRecordTimestampMs(b));
+
   if (historyList.length > 0) {
     rawTelemetryHistory = historyList;
     const elStatusBox = document.getElementById("active-device-status-box");
@@ -809,9 +851,9 @@ function processFirebaseData(data) {
     }
     applyTimeFilter();
   } else {
-    rawTelemetryHistory = [];
-    filteredHistory = [];
-    updateEmptyDeviceState();
+    if (rawTelemetryHistory.length === 0) {
+      updateEmptyDeviceState();
+    }
   }
 }
 
