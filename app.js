@@ -586,23 +586,23 @@ function setConnectionState(stateClass, message) {
   if (stateClass) elStatusBadge.classList.add(stateClass);
 }
 
-function updateSdHealthBadge(statusMsg) {
+function updateSdHealthBadge(statusMsg, isEspActive = false) {
   if (!elSdStatus) return;
   
   if (statusMsg === "OK") {
-    elSdStatus.textContent = "LOGGING (10s)";
+    elSdStatus.textContent = isEspActive ? "LOGGING (10s)" : "OFFLINE (Last: OK)";
     elSdStatus.style.color = "#34d399";
     if (elSdIcon) elSdIcon.className = "fa-solid fa-sd-card color-hum";
     if (elSdDiagBadge) {
-      elSdDiagBadge.textContent = "ONLINE (FAT32 OK)";
+      elSdDiagBadge.textContent = isEspActive ? "ONLINE (FAT32 OK)" : "OFFLINE (Last: OK)";
       elSdDiagBadge.className = "badge badge-optimal";
     }
   } else {
-    elSdStatus.textContent = `ERROR (${statusMsg})`;
+    elSdStatus.textContent = isEspActive ? `ERR (${statusMsg})` : `OFFLINE (Last: ${statusMsg})`;
     elSdStatus.style.color = "#f87171";
     if (elSdIcon) elSdIcon.className = "fa-solid fa-triangle-exclamation color-temp";
     if (elSdDiagBadge) {
-      elSdDiagBadge.textContent = `ERR: ${statusMsg}`;
+      elSdDiagBadge.textContent = isEspActive ? `ERR: ${statusMsg}` : `OFFLINE (Last: ${statusMsg})`;
       elSdDiagBadge.className = "badge badge-err";
     }
   }
@@ -776,37 +776,40 @@ async function fetchTelemetryData() {
   if (isDemoActive) return;
 
   try {
-    const token = await getFirebaseIdToken();
+    // Attempt direct fetch with existing token or unauthenticated first (unblocks startup)
+    const token = firebaseIdToken;
     const fetchUrl = token ? `${activeFirebaseSuiteUrl}?auth=${token}` : activeFirebaseSuiteUrl;
-    const res = await fetch(fetchUrl);
+    let res = await fetch(fetchUrl);
 
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) {
-        firebaseIdToken = null;
         const newToken = await getFirebaseIdToken();
         if (newToken) {
-          const resRetry = await fetch(`${activeFirebaseSuiteUrl}?auth=${newToken}`);
-          if (resRetry.ok) {
-            const dataRetry = await resRetry.json();
-            processFirebaseData(dataRetry);
-            return;
-          }
+          res = await fetch(`${activeFirebaseSuiteUrl}?auth=${newToken}`);
         }
       }
-      throw new Error(`HTTP ${res.status}`);
     }
 
-    const data = await res.json();
-    if (data && !data.error) {
-      lastFirebaseFetchTime = Date.now();
+    if (res && res.ok) {
+      const data = await res.json();
+      if (data && !data.error) {
+        processFirebaseData(data);
+        return;
+      }
     }
-    processFirebaseData(data);
+
+    // Fallback: If network or Firebase returned error
+    if (rawTelemetryHistory.length > 0) {
+      applyTimeFilter();
+    } else {
+      setConnectionState("offline", "Offline • Cloud Data Unavailable");
+    }
   } catch (err) {
     console.warn("Firebase fetch error, maintaining history view:", err);
     if (rawTelemetryHistory.length > 0) {
       applyTimeFilter();
     } else {
-      fetchAhtFallbackData();
+      setConnectionState("offline", "Offline • Network Connection Timeout");
     }
   }
 }
@@ -852,7 +855,8 @@ function processFirebaseData(data) {
       historyList.push(liveRec);
     }
     if (data.Live.SD_Card_Status) {
-      updateSdHealthBadge(data.Live.SD_Card_Status);
+      const isEspActive = (lastRecordReceivedTime > 0) && (Date.now() - lastRecordReceivedTime < 45000);
+      updateSdHealthBadge(data.Live.SD_Card_Status, isEspActive);
     }
   }
 
