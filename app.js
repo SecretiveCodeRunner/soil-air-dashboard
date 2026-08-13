@@ -636,17 +636,17 @@ function updateSdHealthBadge(statusMsg, isEspActive = false) {
     elSdStatus.textContent = isEspActive ? "LOGGING (10s)" : "OFFLINE (Last: OK)";
     elSdStatus.style.color = "#34d399";
     if (elSdIcon) elSdIcon.className = "fa-solid fa-sd-card color-hum";
-    if (elSdDiagBadge) {
-      elSdDiagBadge.textContent = isEspActive ? "ONLINE (FAT32 OK)" : "OFFLINE (Last: OK)";
-      elSdDiagBadge.className = "badge badge-optimal";
+    if (elDiagSdBadge) {
+      elDiagSdBadge.textContent = isEspActive ? "ONLINE (FAT32 OK)" : "OFFLINE (Last: OK)";
+      elDiagSdBadge.className = "badge badge-optimal";
     }
   } else {
     elSdStatus.textContent = isEspActive ? `ERR (${statusMsg})` : `OFFLINE (Last: ${statusMsg})`;
     elSdStatus.style.color = "#f87171";
     if (elSdIcon) elSdIcon.className = "fa-solid fa-triangle-exclamation color-temp";
-    if (elSdDiagBadge) {
-      elSdDiagBadge.textContent = isEspActive ? `ERR: ${statusMsg}` : `OFFLINE (Last: ${statusMsg})`;
-      elSdDiagBadge.className = "badge badge-err";
+    if (elDiagSdBadge) {
+      elDiagSdBadge.textContent = isEspActive ? `ERR: ${statusMsg}` : `OFFLINE (Last: ${statusMsg})`;
+      elDiagSdBadge.className = "badge badge-err";
     }
   }
 }
@@ -686,132 +686,142 @@ function initCharts() {
     if (elTempCanvas) {
       const ctxTemp = elTempCanvas.getContext("2d");
       temperatureChart = new Chart(ctxTemp, {
-    type: "line",
-    data: {
-      labels: [],
-      datasets: [
-        {
-          label: "BME280 Air (°C)",
-          borderColor: "#ff5e62",
-          backgroundColor: "rgba(255, 94, 98, 0.12)",
-          fill: false,
-          tension: 0.25,
-          borderWidth: 2,
-          pointRadius: 2,
-          data: []
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "BME280 Air (°C)",
+              borderColor: "#ff5e62",
+              backgroundColor: "rgba(255, 94, 98, 0.12)",
+              fill: false,
+              tension: 0.25,
+              borderWidth: 2,
+              pointRadius: 2,
+              data: []
+            },
+            {
+              label: "AHT20 Air (°C)",
+              borderColor: "#38ef7d",
+              backgroundColor: "rgba(56, 239, 125, 0.08)",
+              fill: false,
+              tension: 0.25,
+              borderWidth: 2,
+              pointRadius: 2,
+              data: []
+            },
+            {
+              label: "DS18B20 Soil (°C)",
+              borderColor: "#ff9966",
+              backgroundColor: "transparent",
+              borderDash: [5, 5],
+              tension: 0.25,
+              borderWidth: 2,
+              pointRadius: 2,
+              data: []
+            }
+          ]
         },
-        {
-          label: "AHT20 Air (°C)",
-          borderColor: "#38ef7d",
-          backgroundColor: "rgba(56, 239, 125, 0.08)",
-          fill: false,
-          tension: 0.25,
-          borderWidth: 2,
-          pointRadius: 2,
-          data: []
-        },
-        {
-          label: "DS18B20 Soil (°C)",
-          borderColor: "#ff9966",
-          backgroundColor: "transparent",
-          borderDash: [5, 5],
-          tension: 0.25,
-          borderWidth: 2,
-          pointRadius: 2,
-          data: []
-        }
-      ]
-    },
-    options: chartOptions
-  });
+        options: chartOptions
+      });
+    }
 
-  // 2. Humidity Comparison
-  const ctxHum = document.getElementById("humidityChart").getContext("2d");
-  humidityChart = new Chart(ctxHum, {
-    type: "line",
-    data: {
-      labels: [],
-      datasets: [
-        {
-          label: "BME280 Humidity (%)",
-          borderColor: "#00f2fe",
-          backgroundColor: "rgba(0, 242, 254, 0.12)",
-          fill: true,
-          tension: 0.25,
-          borderWidth: 2,
-          pointRadius: 2,
-          data: []
+    // 2. Humidity Comparison
+    const elHumCanvas = document.getElementById("humidityChart");
+    if (elHumCanvas) {
+      const ctxHum = elHumCanvas.getContext("2d");
+      humidityChart = new Chart(ctxHum, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "BME280 Humidity (%)",
+              borderColor: "#00f2fe",
+              backgroundColor: "rgba(0, 242, 254, 0.12)",
+              fill: true,
+              tension: 0.25,
+              borderWidth: 2,
+              pointRadius: 2,
+              data: []
+            },
+            {
+              label: "AHT20 Humidity (%)",
+              borderColor: "#38ef7d",
+              backgroundColor: "rgba(56, 239, 125, 0.08)",
+              fill: true,
+              tension: 0.25,
+              borderWidth: 2,
+              pointRadius: 2,
+              data: []
+            }
+          ]
         },
-        {
-          label: "AHT20 Humidity (%)",
-          borderColor: "#38ef7d",
-          backgroundColor: "rgba(56, 239, 125, 0.08)",
-          fill: true,
-          tension: 0.25,
-          borderWidth: 2,
-          pointRadius: 2,
-          data: []
-        }
-      ]
-    },
-    options: chartOptions
-  });
+        options: chartOptions
+      });
+    }
 
-  // 3. Soil Moisture Comparison
-  const ctxSoil = document.getElementById("soilMoistureChart").getContext("2d");
-  soilMoistureChart = new Chart(ctxSoil, {
-    type: "line",
-    data: {
-      labels: [],
-      datasets: [
-        {
-          label: "Capacitive Soil Moisture (%)",
-          borderColor: "#00f2fe",
-          backgroundColor: "rgba(0, 242, 254, 0.15)",
-          fill: true,
-          tension: 0.25,
-          borderWidth: 2,
-          pointRadius: 2,
-          data: []
+    // 3. Soil Moisture Comparison
+    const elSoilCanvas = document.getElementById("soilMoistureChart");
+    if (elSoilCanvas) {
+      const ctxSoil = elSoilCanvas.getContext("2d");
+      soilMoistureChart = new Chart(ctxSoil, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Capacitive Soil Moisture (%)",
+              borderColor: "#00f2fe",
+              backgroundColor: "rgba(0, 242, 254, 0.15)",
+              fill: true,
+              tension: 0.25,
+              borderWidth: 2,
+              pointRadius: 2,
+              data: []
+            },
+            {
+              label: "Resistive Soil Moisture (%)",
+              borderColor: "#4facfe",
+              backgroundColor: "rgba(79, 172, 254, 0.1)",
+              fill: true,
+              tension: 0.25,
+              borderWidth: 2,
+              pointRadius: 2,
+              data: []
+            }
+          ]
         },
-        {
-          label: "Resistive Soil Moisture (%)",
-          borderColor: "#4facfe",
-          backgroundColor: "rgba(79, 172, 254, 0.1)",
-          fill: true,
-          tension: 0.25,
-          borderWidth: 2,
-          pointRadius: 2,
-          data: []
-        }
-      ]
-    },
-    options: chartOptions
-  });
+        options: chartOptions
+      });
+    }
 
-  // 4. Atmospheric Pressure Waveform
-  const elPressCanvas = document.getElementById("pressureChart");
-  if (elPressCanvas) {
-    const ctxPress = elPressCanvas.getContext("2d");
-    pressureChart = new Chart(ctxPress, {
-      type: "line",
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: "Atmospheric Pressure (hPa)",
-            borderColor: "#a855f7",
-            backgroundColor: "rgba(168, 85, 247, 0.12)",
-            fill: true,
-            tension: 0.25,
-            borderWidth: 2,
-            pointRadius: 2,
-            data: []
-          }
-        ]
-      },
-      options: chartOptions
-    });
+    // 4. Atmospheric Pressure Waveform
+    const elPressCanvas = document.getElementById("pressureChart");
+    if (elPressCanvas) {
+      const ctxPress = elPressCanvas.getContext("2d");
+      pressureChart = new Chart(ctxPress, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Atmospheric Pressure (hPa)",
+              borderColor: "#a855f7",
+              backgroundColor: "rgba(168, 85, 247, 0.12)",
+              fill: true,
+              tension: 0.25,
+              borderWidth: 2,
+              pointRadius: 2,
+              data: []
+            }
+          ]
+        },
+        options: chartOptions
+      });
+    }
+  } catch (err) {
+    console.error("Error initializing Chart.js waveforms:", err);
   }
 }
 
