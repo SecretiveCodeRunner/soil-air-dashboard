@@ -836,20 +836,24 @@ function processFirebaseData(data) {
     }
   }
 
-  // 4. Append .Live record if present and not duplicate
+  // Sort historical logs chronologically
+  historyList.sort((a, b) => parseRecordTimestampMs(a) - parseRecordTimestampMs(b));
+
+  // 4. Append .Live record if present (ALWAYS place at end of array as absolute latest)
   if (data.Live && typeof data.Live === "object") {
-    const liveStamp = data.Live.Timestamp || data.Live.Time;
+    const liveRec = { ...data.Live };
+    if (!liveRec.Date || liveRec.Date.startsWith("2000") || liveRec.Date.startsWith("1970")) {
+      liveRec._rawTime = liveRec.Time;
+      liveRec.Timestamp = new Date().toISOString();
+    }
     const lastHistStamp = historyList.length > 0 ? (historyList[historyList.length - 1].Timestamp || historyList[historyList.length - 1].Time) : null;
-    if (!lastHistStamp || lastHistStamp !== liveStamp) {
-      historyList.push(data.Live);
+    if (!lastHistStamp || lastHistStamp !== (liveRec.Timestamp || liveRec.Time)) {
+      historyList.push(liveRec);
     }
     if (data.Live.SD_Card_Status) {
       updateSdHealthBadge(data.Live.SD_Card_Status);
     }
   }
-
-  // Sort history chronologically by timestamp
-  historyList.sort((a, b) => parseRecordTimestampMs(a) - parseRecordTimestampMs(b));
 
   if (historyList.length > 0) {
     rawTelemetryHistory = historyList;
