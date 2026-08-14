@@ -5,3 +5,6 @@ soil_air_telemetry_studio_native.apk
 android/app/build/
 android/.gradle/
 android_app/
+*.keystore
+*.jks
+android.keystore
