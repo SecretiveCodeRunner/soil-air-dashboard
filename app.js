@@ -74,10 +74,72 @@ async function getFirebaseIdToken() {
 let rawTelemetryHistory = [];
 let filteredHistory = [];
 
-// Telemetry State
-let activeRangeMode = "24h";
-let isDemoActive = false;
-let demoIntervalTimer = null;
+// Platform Detection: Native Capacitor APK vs Web Dashboard
+const isNativeApp = (typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+// ============================================================================
+// DIGITAL SIGNAL PROCESSING (DSP) & SCIENTIFIC ANALYTICS ENGINE
+// ============================================================================
+function dspMedianFilter(arr, windowSize = 5) {
+  const half = Math.floor(windowSize / 2);
+  return arr.map((val, idx) => {
+    if (val === null || isNaN(val)) return null;
+    const start = Math.max(0, idx - half);
+    const end = Math.min(arr.length, idx + half + 1);
+    const slice = arr.slice(start, end).filter(v => v !== null && !isNaN(v)).sort((a, b) => a - b);
+    return slice.length > 0 ? slice[Math.floor(slice.length / 2)] : val;
+  });
+}
+
+function dspCalibrateCapacitive(raw) {
+  if (raw === null || isNaN(raw)) return null;
+  const dry = 2040;
+  const wet = 1080;
+  if (raw >= dry) return 0;
+  if (raw <= wet) return 100;
+  const norm = (dry - raw) / (dry - wet);
+  const curve = Math.pow(norm, 1.15) * 100;
+  return Math.min(100, Math.max(0, curve));
+}
+
+function dspCompensateMoistureTemperature(moistPct, soilTempC, refTemp = 25.0) {
+  if (moistPct === null || soilTempC === null || isNaN(moistPct) || isNaN(soilTempC)) return moistPct;
+  const deltaT = soilTempC - refTemp;
+  const compensated = moistPct - (0.35 * deltaT);
+  return Math.min(100, Math.max(0, compensated));
+}
+
+function dspIirSmooth(arr, alpha = 0.25) {
+  let lastVal = null;
+  return arr.map(val => {
+    if (val === null || isNaN(val)) return null;
+    if (lastVal === null) {
+      lastVal = val;
+      return val;
+    }
+    lastVal = (alpha * val) + ((1 - alpha) * lastVal);
+    return lastVal;
+  });
+}
+
+function processMoistureDSP(records) {
+  if (!records || records.length === 0) return [];
+  const rawCapArray = records.map(r => r.CapMoisture_Raw ?? 2040);
+  const medCap = dspMedianFilter(rawCapArray, 5);
+  const calibCapComp = medCap.map((adc, i) => {
+    const rawPct = dspCalibrateCapacitive(adc);
+    const soilT = records[i] ? (records[i].SoilTemp_C ?? 25.0) : 25.0;
+    return dspCompensateMoistureTemperature(rawPct, soilT, 25.0);
+  });
+  return dspIirSmooth(calibCapComp, 0.25);
+}
+
+function calculateVPD(airTempC, airHumPct) {
+  if (airTempC === null || airHumPct === null || isNaN(airTempC) || isNaN(airHumPct)) return null;
+  const vpSat = 0.61078 * Math.exp((17.27 * airTempC) / (airTempC + 237.3));
+  const vpAct = vpSat * (airHumPct / 100);
+  return Math.max(0, vpSat - vpAct);
+}
 
 // Chart Instances
 let temperatureChart = null;
@@ -169,6 +231,21 @@ document.addEventListener("DOMContentLoaded", () => {
 // NATIVE BOTTOM NAVIGATION
 // ============================================================================
 function initNavigation() {
+  if (!isNativeApp) {
+    document.body.classList.add("platform-web");
+    const controlTabs = document.querySelectorAll(".nav-control-tab");
+    const settingsTabs = document.querySelectorAll(".nav-settings-tab");
+    controlTabs.forEach(t => t.style.display = "none");
+    settingsTabs.forEach(t => t.style.display = "none");
+
+    const viewControl = document.getElementById("view-control");
+    const viewSettings = document.getElementById("view-settings");
+    if (viewControl) viewControl.style.display = "none";
+    if (viewSettings) viewSettings.style.display = "none";
+  } else {
+    document.body.classList.add("platform-app");
+  }
+
   const items = document.querySelectorAll(".nav-item");
   const panels = document.querySelectorAll(".view-panel");
 
@@ -732,34 +809,52 @@ function initCharts() {
     const elSoilCanvas = document.getElementById("soilMoistureChart");
     if (elSoilCanvas) {
       const ctxSoil = elSoilCanvas.getContext("2d");
+      const soilDatasets = [
+        {
+          label: "Capacitive Soil Moisture (%)",
+          borderColor: "#00f2fe",
+          backgroundColor: "rgba(0, 242, 254, 0.12)",
+          fill: false,
+          tension: 0.35,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          data: []
+        },
+        {
+          label: "Resistive Soil Moisture (%)",
+          borderColor: "#4facfe",
+          backgroundColor: "transparent",
+          fill: false,
+          tension: 0.35,
+          borderWidth: 1.8,
+          borderDash: [4, 4],
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          data: []
+        }
+      ];
+
+      // Add DSP Filtered Realization Dataset on Website for Comparative Testing
+      if (!isNativeApp) {
+        soilDatasets.push({
+          label: "DSP Filtered & Temp-Compensated (%)",
+          borderColor: "#10b981",
+          backgroundColor: "rgba(16, 185, 129, 0.15)",
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 6,
+          data: []
+        });
+      }
+
       soilMoistureChart = new Chart(ctxSoil, {
         type: "line",
         data: {
           labels: [],
-          datasets: [
-            {
-              label: "Capacitive Soil Moisture (%)",
-              borderColor: "#00f2fe",
-              backgroundColor: "rgba(0, 242, 254, 0.15)",
-              fill: true,
-              tension: 0.35,
-              borderWidth: 2.2,
-              pointRadius: 0,
-              pointHoverRadius: 5,
-              data: []
-            },
-            {
-              label: "Resistive Soil Moisture (%)",
-              borderColor: "#4facfe",
-              backgroundColor: "rgba(79, 172, 254, 0.1)",
-              fill: true,
-              tension: 0.35,
-              borderWidth: 2.2,
-              pointRadius: 0,
-              pointHoverRadius: 5,
-              data: []
-            }
-          ]
+          datasets: soilDatasets
         },
         options: chartOptions
       });
@@ -838,7 +933,7 @@ async function getShallowHistoryKeys(basePath) {
   return cachedShallowKeys || [];
 }
 
-// 1. Dynamic Historical Timeline Fetcher (Decimates/Samples timeline to ~100 points, consuming <30 KB)
+// 1. Dynamic Historical Timeline Fetcher (Samples timeline to ~1,000 high-resolution points)
 async function fetchHistoricalTimeline(rangeMode = "24h") {
   if (isDemoActive) return;
   const basePath = getActiveDeviceBasePath();
@@ -854,47 +949,50 @@ async function fetchHistoricalTimeline(rangeMode = "24h") {
     if (rangeMode === "15m") {
       targetKeys = allKeys.slice(-90);
     } else if (rangeMode === "1h") {
-      const last1h = allKeys.slice(-360);
-      const step = Math.max(1, Math.floor(last1h.length / 60));
-      for (let i = 0; i < last1h.length; i += step) targetKeys.push(last1h[i]);
-      if (targetKeys[targetKeys.length - 1] !== last1h[last1h.length - 1]) targetKeys.push(last1h[last1h.length - 1]);
+      targetKeys = allKeys.slice(-360);
     } else if (rangeMode === "24h") {
       const last24h = allKeys.slice(-8640);
-      const step = Math.max(1, Math.floor(last24h.length / 100));
+      const step = Math.max(1, Math.floor(last24h.length / 1000));
       for (let i = 0; i < last24h.length; i += step) targetKeys.push(last24h[i]);
       if (targetKeys[targetKeys.length - 1] !== last24h[last24h.length - 1]) targetKeys.push(last24h[last24h.length - 1]);
     } else if (rangeMode === "7d") {
       const last7d = allKeys.slice(-60480);
-      const step = Math.max(1, Math.floor(last7d.length / 120));
+      const step = Math.max(1, Math.floor(last7d.length / 1200));
       for (let i = 0; i < last7d.length; i += step) targetKeys.push(last7d[i]);
       if (targetKeys[targetKeys.length - 1] !== last7d[last7d.length - 1]) targetKeys.push(last7d[last7d.length - 1]);
     } else if (rangeMode === "all") {
-      const step = Math.max(1, Math.floor(totalKeys / 150));
+      const step = Math.max(1, Math.floor(totalKeys / 1200));
       for (let i = 0; i < totalKeys; i += step) targetKeys.push(allKeys[i]);
       if (targetKeys[targetKeys.length - 1] !== allKeys[totalKeys - 1]) targetKeys.push(allKeys[totalKeys - 1]);
     } else {
-      targetKeys = allKeys.slice(-60);
+      targetKeys = allKeys.slice(-120);
     }
 
     const token = await getFirebaseIdToken();
     const authQuery = token ? `?auth=${token}` : '';
 
-    const pointPromises = targetKeys.map(async k => {
-      try {
-        const r = await fetch(`${FIREBASE_BASE_URL}${basePath}/History/${k}.json${authQuery}`);
-        return r.ok ? await r.json() : null;
-      } catch (e) {
-        return null;
-      }
-    });
+    // Parallel fetch in fast batches of 60
+    const batchSize = 60;
+    const allResults = [];
+    for (let i = 0; i < targetKeys.length; i += batchSize) {
+      const chunk = targetKeys.slice(i, i + batchSize);
+      const chunkRes = await Promise.all(chunk.map(async k => {
+        try {
+          const r = await fetch(`${FIREBASE_BASE_URL}${basePath}/History/${k}.json${authQuery}`);
+          return r.ok ? await r.json() : null;
+        } catch (e) {
+          return null;
+        }
+      }));
+      allResults.push(...chunkRes);
+    }
 
-    const results = await Promise.all(pointPromises);
-    const validPoints = results.filter(p => p && (p.Time || p.Timestamp));
+    const validPoints = allResults.filter(p => p && (p.Time || p.Timestamp));
 
     if (validPoints.length > 0) {
       rawTelemetryHistory = validPoints;
       try {
-        localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(rawTelemetryHistory.slice(-200)));
+        localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(rawTelemetryHistory.slice(-500)));
       } catch (e) {}
       applyTimeFilter();
     }
@@ -1123,6 +1221,9 @@ async function fetchAhtFallbackData() {
 // ============================================================================
 // UI UPDATES & STOCK CHART TIME GAP PLOTTING
 // ============================================================================
+// ============================================================================
+// UI UPDATES & STOCK CHART TIME GAP PLOTTING
+// ============================================================================
 function updateDashboardUI() {
   if (rawTelemetryHistory.length === 0) return;
 
@@ -1150,6 +1251,35 @@ function updateDashboardUI() {
   if (elCapRaw) elCapRaw.textContent = latest.CapMoisture_Raw ?? "--";
   if (elResRaw) elResRaw.textContent = latest.ResMoisture_Raw ?? "--";
   if (elBmePress) elBmePress.innerHTML = `${formatNum(latest.BME_AirPressure_hPa ?? latest.AirPressure_hPa, 1)} <span class="unit">hPa</span>`;
+
+  // On Web Platform: Update VPD & DSP Filtered Moisture Cards
+  if (!isNativeApp) {
+    const airT = (bmeTemp !== undefined && bmeTemp !== null) ? bmeTemp : (ahtTemp ?? 25.0);
+    const airH = (bmeHum !== undefined && bmeHum !== null) ? bmeHum : (ahtHum ?? 50.0);
+    const vpd = calculateVPD(airT, airH);
+    const elVpd = document.getElementById("val-vpd");
+    const elBadgeVpd = document.getElementById("badge-vpd");
+    if (elVpd && vpd !== null) elVpd.innerHTML = `${formatNum(vpd, 2)} <span class="unit">kPa</span>`;
+    if (elBadgeVpd && vpd !== null) {
+      if (vpd < 0.4) {
+        elBadgeVpd.textContent = "Low Transp.";
+        elBadgeVpd.className = "badge badge-warning";
+      } else if (vpd > 1.6) {
+        elBadgeVpd.textContent = "High Stress";
+        elBadgeVpd.className = "badge badge-danger";
+      } else {
+        elBadgeVpd.textContent = "Optimal";
+        elBadgeVpd.className = "badge badge-optimal";
+      }
+    }
+
+    const latestCapRaw = latest.CapMoisture_Raw ?? 2040;
+    const latestSoilT = latest.SoilTemp_C ?? 25.0;
+    const dspCalib = dspCalibrateCapacitive(latestCapRaw);
+    const dspComp = dspCompensateMoistureTemperature(dspCalib, latestSoilT, 25.0);
+    const elDspMoist = document.getElementById("val-dsp-moist");
+    if (elDspMoist && dspComp !== null) elDspMoist.innerHTML = `${formatNum(dspComp, 0)} <span class="unit">%</span>`;
+  }
 
   // Compute & Display Maximum and Minimum Stats for current window
   updateMetricsStats(displayHistory);
@@ -1210,12 +1340,25 @@ function updateMetricsStats(records) {
 
   setElText("max-bme-press", sBmePress.max, 1);
   setElText("min-bme-press", sBmePress.min, 1);
+
+  if (!isNativeApp) {
+    const vpdVals = records.map(r => {
+      const t = r.BME_AirTemp_C ?? r.AHT_AirTemp_C ?? r.AirTemp_C;
+      const h = r.BME_AirHumidity_Pct ?? r.AHT_AirHumidity_Pct ?? r.AirHumidity_Pct;
+      return (t !== undefined && h !== undefined) ? calculateVPD(t, h) : null;
+    }).filter(v => v !== null && !isNaN(v));
+
+    if (vpdVals.length > 0) {
+      setElText("max-vpd", Math.max(...vpdVals), 2);
+      setElText("min-vpd", Math.min(...vpdVals), 2);
+    }
+  }
 }
 
 function updateCharts(records) {
   if (!records || records.length === 0) return;
 
-  const maxChartPoints = 120;
+  const maxChartPoints = 1200;
   const step = Math.max(1, Math.floor(records.length / maxChartPoints));
   const sampledRecords = records.filter((_, idx) => idx % step === 0);
 
@@ -1314,6 +1457,13 @@ function updateCharts(records) {
     soilMoistureChart.data.labels = labels;
     soilMoistureChart.data.datasets[0].data = capMoistData;
     soilMoistureChart.data.datasets[1].data = resMoistData;
+
+    // On Web: Update 3rd DSP Filtered dataset
+    if (!isNativeApp && soilMoistureChart.data.datasets.length > 2) {
+      const dspMoistData = processMoistureDSP(sampledRecords);
+      soilMoistureChart.data.datasets[2].data = dspMoistData;
+    }
+
     soilMoistureChart.update();
   }
 

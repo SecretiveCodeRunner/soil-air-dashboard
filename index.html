@@ -222,6 +222,37 @@
             <div class="metric-spark">BME280 Pressure Sensor</div>
           </div>
         </div>
+
+        <!-- Vapor Pressure Deficit (VPD) [Web Analytics Realization] -->
+        <div class="metric-card web-only-feature" id="card-vpd">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-wind color-hum"></i> Vapor Pressure Deficit (VPD)</span>
+            <span class="badge badge-optimal" id="badge-vpd">Optimal</span>
+          </div>
+          <div class="metric-body">
+            <div class="metric-value" id="val-vpd">-- <span class="unit">kPa</span></div>
+            <div class="metric-stats">
+              <span class="stat-item stat-max"><i class="fa-solid fa-arrow-trend-up"></i> Max: <strong id="max-vpd">--</strong></span>
+              <span class="stat-item stat-min"><i class="fa-solid fa-arrow-trend-down"></i> Min: <strong id="min-vpd">--</strong></span>
+            </div>
+            <div class="metric-spark">Plant Transpiration Stress Index</div>
+          </div>
+        </div>
+
+        <!-- DSP Filtered Soil Moisture [Web Analytics Realization] -->
+        <div class="metric-card web-only-feature" id="card-dsp-moist">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-wand-magic-sparkles color-cap"></i> DSP Filtered Moisture</span>
+            <span class="badge badge-optimal" id="badge-dsp-moist">DSP Filtered</span>
+          </div>
+          <div class="metric-body">
+            <div class="metric-value" id="val-dsp-moist">-- <span class="unit">%</span></div>
+            <div class="metric-stats">
+              <span class="stat-item"><i class="fa-solid fa-temperature-half"></i> Temp-Compensated (25°C)</span>
+            </div>
+            <div class="metric-spark">Median Filter + Non-Linear Calib + IIR</div>
+          </div>
+        </div>
       </section>
 
     </div>
@@ -664,11 +695,11 @@
         <i class="fa-solid fa-list-check"></i>
         <span>History</span>
       </button>
-      <button class="nav-item" data-target="view-control">
+      <button class="nav-item nav-control-tab" data-target="view-control">
         <i class="fa-solid fa-toggle-on"></i>
         <span>Control</span>
       </button>
-      <button class="nav-item" data-target="view-settings">
+      <button class="nav-item nav-settings-tab" data-target="view-settings">
         <i class="fa-solid fa-gear"></i>
         <span>Settings</span>
       </button>
