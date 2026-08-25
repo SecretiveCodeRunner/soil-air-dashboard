@@ -1780,6 +1780,102 @@ body.platform-web {
   gap: 6px;
 }
 
+/* MOBILE RESPONSIVE ENHANCEMENTS (SMARTPHONES & TABLETS) */
+@media (max-width: 768px) {
+  .app-header {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .app-brand {
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .header-actions {
+    flex-shrink: 0;
+  }
+
+  .top-nav-bar {
+    order: 3;
+    width: 100%;
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 4px;
+    padding: 3px;
+    scrollbar-width: none;
+    background: rgba(15, 23, 42, 0.7);
+  }
+
+  .top-nav-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .top-nav-bar .nav-item {
+    flex: 1;
+    padding: 7px 8px;
+    font-size: 11px;
+    justify-content: center;
+    min-width: 65px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .top-nav-bar .nav-item i {
+    font-size: 12px;
+  }
+
+  .research-header-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .research-header-banner .banner-title {
+    gap: 10px;
+  }
+
+  .research-header-banner .banner-title i {
+    padding: 8px;
+    font-size: 18px;
+  }
+
+  .research-stats-pill {
+    align-self: flex-start;
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  .chart-card.full-width {
+    grid-column: span 1 !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand-text h1 {
+    font-size: 15px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+
+  .connection-badge {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+}
+
 
 
 

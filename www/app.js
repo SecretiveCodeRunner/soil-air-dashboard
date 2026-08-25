@@ -985,6 +985,21 @@ function initCharts() {
           },
           options: {
             ...chartOptions,
+            plugins: {
+              ...chartOptions.plugins,
+              tooltip: {
+                callbacks: {
+                  label: function(ctx) {
+                    const p = ctx.raw;
+                    return [
+                      `Timestamp: ${p.label || 'N/A'}`,
+                      `Air Temp: ${p.x}°C | Soil Temp: ${p.y}°C`,
+                      `Gradient: ${(p.x - p.y >= 0 ? '+' : '')}${(p.x - p.y).toFixed(2)}°C (${p.x >= p.y ? 'Air Warmer' : 'Soil Warmer (Direct Sun)'})`
+                    ];
+                  }
+                }
+              }
+            },
             scales: {
               x: {
                 title: { display: true, text: "Air Temperature (°C)", color: "#8a99ad", font: { size: 11, weight: 'bold' } },
@@ -1761,7 +1776,18 @@ function updateResearchLab(records) {
     const airT = r.BME_AirTemp_C ?? r.AHT_AirTemp_C ?? r.AirTemp_C;
     const soilT = r.SoilTemp_C;
     if (airT !== null && airT !== undefined && soilT !== null && soilT !== undefined) {
-      hysteresisPoints.push({ x: Number(Number(airT).toFixed(2)), y: Number(Number(soilT).toFixed(2)) });
+      let timeLabel = "";
+      if (r.Date && r.Time) {
+        const p = r.Date.split("-");
+        timeLabel = p.length === 3 ? `${p[1]}/${p[2]} ${r.Time.substring(0, 5)}` : `${r.Date} ${r.Time.substring(0, 5)}`;
+      } else if (r.Time) {
+        timeLabel = r.Time.substring(0, 5);
+      }
+      hysteresisPoints.push({
+        x: Number(Number(airT).toFixed(2)),
+        y: Number(Number(soilT).toFixed(2)),
+        label: timeLabel
+      });
     }
   });
 
