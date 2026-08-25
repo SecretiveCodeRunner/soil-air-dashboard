@@ -414,12 +414,15 @@ function showCsvTextCopyModal(csvString, fileName) {
 function initTimelineControls() {
   if (!elTimeRangeSelect) return;
 
-  elTimeRangeSelect.addEventListener("change", (e) => {
+  elTimeRangeSelect.addEventListener("change", async (e) => {
     activeRangeMode = e.target.value;
     if (activeRangeMode === "custom") {
       elCustomDateContainer.classList.remove("hidden");
     } else {
       elCustomDateContainer.classList.add("hidden");
+      if (typeof fetchHistoricalTimeline === "function") {
+        await fetchHistoricalTimeline(activeRangeMode);
+      }
       applyTimeFilter();
     }
   });
@@ -443,19 +446,19 @@ function applyTimeFilter() {
 
   if (activeRangeMode === "15m") {
     cutoffMs = now - (15 * 60 * 1000);
-    summaryText = "Realtime telemetry (Last 15 Min)";
+    summaryText = `Realtime stream (Last 15 Min • ${rawTelemetryHistory.length} points)`;
   } else if (activeRangeMode === "1h") {
     cutoffMs = now - (1 * 60 * 60 * 1000);
-    summaryText = "Last 1 hour of telemetry";
+    summaryText = `Last 1 hour timeline (${rawTelemetryHistory.length} points)`;
   } else if (activeRangeMode === "24h") {
     cutoffMs = now - (24 * 60 * 60 * 1000);
-    summaryText = "Last 24 hours of telemetry";
+    summaryText = `Last 24 hours timeline (${rawTelemetryHistory.length} sampled points)`;
   } else if (activeRangeMode === "7d") {
     cutoffMs = now - (7 * 24 * 60 * 60 * 1000);
-    summaryText = "Last 7 days of telemetry";
+    summaryText = `Last 7 days timeline (${rawTelemetryHistory.length} sampled points)`;
   } else if (activeRangeMode === "all") {
     cutoffMs = 0;
-    summaryText = `Full history log (${rawTelemetryHistory.length} total entries)`;
+    summaryText = `Full history timeline (${rawTelemetryHistory.length} sampled points)`;
   } else if (activeRangeMode === "custom") {
     const fromTime = elDateFrom.value ? new Date(elDateFrom.value).getTime() : 0;
     const toTime = elDateTo.value ? new Date(elDateTo.value).getTime() : Infinity;
@@ -471,20 +474,7 @@ function applyTimeFilter() {
     return;
   }
 
-  if (activeRangeMode === "all" || cutoffMs === 0) {
-    filteredHistory = [...rawTelemetryHistory];
-  } else {
-    // Filter items that match timestamp range OR are recent push entries (so new logging is NEVER hidden)
-    filteredHistory = rawTelemetryHistory.filter((r, idx) => {
-      if (idx >= rawTelemetryHistory.length - 100) return true;
-      const tMs = parseRecordTimestampMs(r);
-      return tMs >= cutoffMs;
-    });
-  }
-
-  if (filteredHistory.length === 0 && rawTelemetryHistory.length > 0) {
-    filteredHistory = [...rawTelemetryHistory];
-  }
+  filteredHistory = [...rawTelemetryHistory];
 
   if (elFilterSummaryText) elFilterSummaryText.textContent = summaryText;
   updateDashboardUI();
@@ -798,77 +788,106 @@ function getActiveDeviceBasePath() {
   return p;
 }
 
-// 1. Initial Historical Load (Executes ONCE on startup or device switch)
-async function fetchInitialHistory() {
-  if (isDemoActive) return;
+// Cache shallow keys for responsive timeline switching without re-downloading key index
+let cachedShallowKeys = null;
+let lastShallowFetchTime = 0;
 
-  const basePath = getActiveDeviceBasePath();
+async function getShallowHistoryKeys(basePath) {
+  const now = Date.now();
+  if (cachedShallowKeys && (now - lastShallowFetchTime < 45000)) {
+    return cachedShallowKeys;
+  }
+
+  const token = await getFirebaseIdToken();
+  const authQuery = token ? `?auth=${token}&shallow=true` : '?shallow=true';
+  const shallowUrl = `${FIREBASE_BASE_URL}${basePath}/History.json${authQuery}`;
+
   try {
-    const token = await getFirebaseIdToken();
-    const authParam = token ? `auth=${token}` : '';
-
-    // Step A: Attempt server-side index query if rules allow it
-    let historyUrl = `${FIREBASE_BASE_URL}${basePath}/History.json?${authParam ? authParam + '&' : ''}orderBy="$key"&limitToLast=50`;
-    let res = await fetch(historyUrl);
-
-    if (!res.ok && (res.status === 401 || res.status === 403)) {
-      const newToken = await getFirebaseIdToken();
-      if (newToken) {
-        historyUrl = `${FIREBASE_BASE_URL}${basePath}/History.json?auth=${newToken}&orderBy="$key"&limitToLast=50`;
-        res = await fetch(historyUrl);
-      }
-    }
-
-    if (res && res.ok) {
+    const res = await fetch(shallowUrl);
+    if (res.ok) {
       const data = await res.json();
-      if (data && !data.error && typeof data === 'object') {
-        const histArray = Object.values(data).filter(v => v && typeof v === 'object');
-        if (histArray.length > 0) {
-          rawTelemetryHistory = histArray;
-          try {
-            localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(rawTelemetryHistory.slice(-200)));
-          } catch (e) {}
-          applyTimeFilter();
-          return;
-        }
+      if (data && typeof data === 'object') {
+        cachedShallowKeys = Object.keys(data).sort();
+        lastShallowFetchTime = now;
+        return cachedShallowKeys;
       }
     }
+  } catch (e) {
+    console.warn("Error fetching shallow keys:", e);
+  }
+  return cachedShallowKeys || [];
+}
 
-    // Step B: Robust Unindexed Fallback via shallow keys (~40 KB metadata + parallel fetch of last 40 items)
-    const activeToken = firebaseIdToken || (await getFirebaseIdToken());
-    const shallowUrl = `${FIREBASE_BASE_URL}${basePath}/History.json?${activeToken ? `auth=${activeToken}&` : ''}shallow=true`;
-    const shallowRes = await fetch(shallowUrl);
+// 1. Dynamic Historical Timeline Fetcher (Decimates/Samples timeline to ~100 points, consuming <30 KB)
+async function fetchHistoricalTimeline(rangeMode = "24h") {
+  if (isDemoActive) return;
+  const basePath = getActiveDeviceBasePath();
 
-    if (shallowRes && shallowRes.ok) {
-      const shallowData = await shallowRes.json();
-      if (shallowData && typeof shallowData === 'object') {
-        const keys = Object.keys(shallowData).sort();
-        const recentKeys = keys.slice(-40); // grab the latest 40 pushed points
+  try {
+    const allKeys = await getShallowHistoryKeys(basePath);
+    if (!allKeys || allKeys.length === 0) return;
 
-        const fetchedPoints = await Promise.all(recentKeys.map(async k => {
-          try {
-            const pointRes = await fetch(`${FIREBASE_BASE_URL}${basePath}/History/${k}.json${activeToken ? `?auth=${activeToken}` : ''}`);
-            return pointRes.ok ? await pointRes.json() : null;
-          } catch (e) {
-            return null;
-          }
-        }));
+    let targetKeys = [];
+    const totalKeys = allKeys.length;
 
-        const validPoints = fetchedPoints.filter(p => p && typeof p === 'object');
-        if (validPoints.length > 0) {
-          rawTelemetryHistory = validPoints;
-          try {
-            localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(rawTelemetryHistory.slice(-200)));
-          } catch (e) {}
-          applyTimeFilter();
-          return;
-        }
+    // 10s sample interval: 6/min = 360/hr = 8640/day
+    if (rangeMode === "15m") {
+      targetKeys = allKeys.slice(-90);
+    } else if (rangeMode === "1h") {
+      const last1h = allKeys.slice(-360);
+      const step = Math.max(1, Math.floor(last1h.length / 60));
+      for (let i = 0; i < last1h.length; i += step) targetKeys.push(last1h[i]);
+      if (targetKeys[targetKeys.length - 1] !== last1h[last1h.length - 1]) targetKeys.push(last1h[last1h.length - 1]);
+    } else if (rangeMode === "24h") {
+      const last24h = allKeys.slice(-8640);
+      const step = Math.max(1, Math.floor(last24h.length / 100));
+      for (let i = 0; i < last24h.length; i += step) targetKeys.push(last24h[i]);
+      if (targetKeys[targetKeys.length - 1] !== last24h[last24h.length - 1]) targetKeys.push(last24h[last24h.length - 1]);
+    } else if (rangeMode === "7d") {
+      const last7d = allKeys.slice(-60480);
+      const step = Math.max(1, Math.floor(last7d.length / 120));
+      for (let i = 0; i < last7d.length; i += step) targetKeys.push(last7d[i]);
+      if (targetKeys[targetKeys.length - 1] !== last7d[last7d.length - 1]) targetKeys.push(last7d[last7d.length - 1]);
+    } else if (rangeMode === "all") {
+      const step = Math.max(1, Math.floor(totalKeys / 150));
+      for (let i = 0; i < totalKeys; i += step) targetKeys.push(allKeys[i]);
+      if (targetKeys[targetKeys.length - 1] !== allKeys[totalKeys - 1]) targetKeys.push(allKeys[totalKeys - 1]);
+    } else {
+      targetKeys = allKeys.slice(-60);
+    }
+
+    const token = await getFirebaseIdToken();
+    const authQuery = token ? `?auth=${token}` : '';
+
+    const pointPromises = targetKeys.map(async k => {
+      try {
+        const r = await fetch(`${FIREBASE_BASE_URL}${basePath}/History/${k}.json${authQuery}`);
+        return r.ok ? await r.json() : null;
+      } catch (e) {
+        return null;
       }
+    });
+
+    const results = await Promise.all(pointPromises);
+    const validPoints = results.filter(p => p && (p.Time || p.Timestamp));
+
+    if (validPoints.length > 0) {
+      rawTelemetryHistory = validPoints;
+      try {
+        localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(rawTelemetryHistory.slice(-200)));
+      } catch (e) {}
+      applyTimeFilter();
     }
   } catch (err) {
-    console.warn("Initial history fetch fallback, relying on cache and live stream:", err);
+    console.warn("fetchHistoricalTimeline error:", err);
   }
 }
+
+// Initial historical load uses the active time range (default 24h)
+async function fetchInitialHistory() {
+  await fetchHistoricalTimeline(activeRangeMode || "24h");
+}
+
 
 // 2. High-Frequency Live Poller (Polls ONLY /Live.json -> ~300 bytes per request)
 async function fetchTelemetryData() {
@@ -1939,6 +1958,9 @@ async function switchActiveDevice(devId) {
 
   activeDeviceId = devId;
   localStorage.setItem("soil_air_active_dev_id", activeDeviceId);
+
+  cachedShallowKeys = null;
+  lastShallowFetchTime = 0;
 
   updateActiveDeviceBanner();
   renderDevicesList();
