@@ -149,11 +149,25 @@ function calculateVPD(airTempC, airHumPct) {
   return Math.max(0, vpSat - vpAct);
 }
 
-// Chart Instances
+function calculateDewPoint(tempC, humPct) {
+  if (tempC === null || humPct === null || isNaN(tempC) || isNaN(humPct) || humPct <= 0) return null;
+  const a = 17.27;
+  const b = 237.7;
+  const alpha = ((a * tempC) / (b + tempC)) + Math.log(humPct / 100);
+  return (b * alpha) / (a - alpha);
+}
+
+// Operational Chart Instances
 let temperatureChart = null;
 let humidityChart = null;
 let soilMoistureChart = null;
 let pressureChart = null;
+
+// Research & Analytics Lab Chart Instances
+let thermalHysteresisChart = null;
+let capillaryDynamicsChart = null;
+let dewPointRiskChart = null;
+let salinityDiscrepancyChart = null;
 
 // DOM Elements
 const elStatusBadge = document.getElementById("connection-status");
@@ -893,6 +907,154 @@ function initCharts() {
         options: chartOptions
       });
     }
+
+    // ========================================================================
+    // RESEARCH & ANALYTICS LAB CHARTS (WEB DASHBOARD)
+    // ========================================================================
+    if (!isNativeApp) {
+      // 1. Soil Thermal Hysteresis Phase Portrait
+      const elHystCanvas = document.getElementById("thermalHysteresisChart");
+      if (elHystCanvas) {
+        const ctxHyst = elHystCanvas.getContext("2d");
+        thermalHysteresisChart = new Chart(ctxHyst, {
+          type: "scatter",
+          data: {
+            datasets: [{
+              label: "Diurnal Hysteresis Loop (T_soil vs T_air)",
+              data: [],
+              borderColor: "#00f2fe",
+              backgroundColor: "rgba(0, 242, 254, 0.2)",
+              showLine: true,
+              tension: 0.25,
+              borderWidth: 2,
+              pointRadius: 2,
+              pointHoverRadius: 6
+            }]
+          },
+          options: {
+            ...chartOptions,
+            scales: {
+              x: {
+                title: { display: true, text: "Air Temperature (°C)", color: "#8a99ad", font: { size: 11, weight: 'bold' } },
+                grid: { color: "rgba(255, 255, 255, 0.05)" },
+                ticks: { color: "#8a99ad" }
+              },
+              y: {
+                title: { display: true, text: "Soil Temperature (°C)", color: "#8a99ad", font: { size: 11, weight: 'bold' } },
+                grid: { color: "rgba(255, 255, 255, 0.05)" },
+                ticks: { color: "#8a99ad" }
+              }
+            }
+          }
+        });
+      }
+
+      // 2. Capillary Recharge vs Evapotranspiration Rate
+      const elCapDynCanvas = document.getElementById("capillaryDynamicsChart");
+      if (elCapDynCanvas) {
+        const ctxCapDyn = elCapDynCanvas.getContext("2d");
+        capillaryDynamicsChart = new Chart(ctxCapDyn, {
+          type: "bar",
+          data: {
+            labels: [],
+            datasets: [{
+              label: "Moisture Dynamics dθ/dt (%/hr)",
+              data: [],
+              backgroundColor: [],
+              borderRadius: 3
+            }]
+          },
+          options: {
+            ...chartOptions,
+            scales: {
+              x: { grid: { display: false }, ticks: { color: "#8a99ad" } },
+              y: {
+                title: { display: true, text: "dθ/dt (% / Hour)", color: "#8a99ad", font: { size: 11, weight: 'bold' } },
+                grid: { color: "rgba(255, 255, 255, 0.05)" },
+                ticks: { color: "#8a99ad" }
+              }
+            }
+          }
+        });
+      }
+
+      // 3. Dew Point & Condensation / Fungal Risk Margin
+      const elDewCanvas = document.getElementById("dewPointRiskChart");
+      if (elDewCanvas) {
+        const ctxDew = elDewCanvas.getContext("2d");
+        dewPointRiskChart = new Chart(ctxDew, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "Condensation Margin ΔT_dew (°C)",
+                data: [],
+                borderColor: "#38ef7d",
+                backgroundColor: "rgba(56, 239, 125, 0.12)",
+                fill: true,
+                tension: 0.35,
+                borderWidth: 2.2,
+                pointRadius: 0
+              },
+              {
+                label: "Critical Condensation Limit (1.5°C)",
+                data: [],
+                borderColor: "#ef4444",
+                borderDash: [5, 5],
+                borderWidth: 1.5,
+                pointRadius: 0,
+                fill: false
+              }
+            ]
+          },
+          options: {
+            ...chartOptions,
+            scales: {
+              x: { grid: { display: false }, ticks: { color: "#8a99ad" } },
+              y: {
+                title: { display: true, text: "Margin to Dew Point (°C)", color: "#8a99ad", font: { size: 11, weight: 'bold' } },
+                grid: { color: "rgba(255, 255, 255, 0.05)" },
+                ticks: { color: "#8a99ad" }
+              }
+            }
+          }
+        });
+      }
+
+      // 4. Dual Sensor Discrepancy & Salinity Index
+      const elSalCanvas = document.getElementById("salinityDiscrepancyChart");
+      if (elSalCanvas) {
+        const ctxSal = elSalCanvas.getContext("2d");
+        salinityDiscrepancyChart = new Chart(ctxSal, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [{
+              label: "Discrepancy (Cap% - Res%)",
+              data: [],
+              borderColor: "#f59e0b",
+              backgroundColor: "rgba(245, 158, 11, 0.12)",
+              fill: true,
+              tension: 0.35,
+              borderWidth: 2,
+              pointRadius: 0
+            }]
+          },
+          options: {
+            ...chartOptions,
+            scales: {
+              x: { grid: { display: false }, ticks: { color: "#8a99ad" } },
+              y: {
+                title: { display: true, text: "Capacitive - Resistive Offset (%)", color: "#8a99ad", font: { size: 11, weight: 'bold' } },
+                grid: { color: "rgba(255, 255, 255, 0.05)" },
+                ticks: { color: "#8a99ad" }
+              }
+            }
+          }
+        });
+      }
+    }
   } catch (err) {
     console.error("Error initializing Chart.js waveforms:", err);
   }
@@ -1287,6 +1449,9 @@ function updateDashboardUI() {
   evaluateBangBangController(latest);
 
   updateCharts(displayHistory);
+  if (!isNativeApp) {
+    updateResearchLab(displayHistory);
+  }
   updateTable(displayHistory);
 
   if (elRecordsCount) elRecordsCount.textContent = `${displayHistory.length} Records Loaded (${rawTelemetryHistory.length} Total)`;
@@ -1470,6 +1635,119 @@ function updateCharts(records) {
     pressureChart.data.labels = labels;
     pressureChart.data.datasets[0].data = pressData;
     pressureChart.update();
+  }
+}
+
+// ============================================================================
+// RESEARCH & ANALYTICS LAB COMPUTATION ENGINE (WEB STUDIO)
+// ============================================================================
+function updateResearchLab(records) {
+  if (!records || records.length === 0) return;
+
+  const maxResearchPoints = 600;
+  const step = Math.max(1, Math.floor(records.length / maxResearchPoints));
+  const sampled = records.filter((_, idx) => idx % step === 0);
+
+  const elBadge = document.getElementById("research-records-badge");
+  if (elBadge) {
+    elBadge.innerHTML = `<i class="fa-solid fa-database"></i> ${sampled.length} High-Fidelity Samples (${records.length} Total)`;
+  }
+
+  // 1. Soil Thermal Hysteresis Phase Loop (T_soil vs T_air)
+  const hysteresisPoints = [];
+  sampled.forEach(r => {
+    const airT = r.BME_AirTemp_C ?? r.AHT_AirTemp_C ?? r.AirTemp_C;
+    const soilT = r.SoilTemp_C;
+    if (airT !== null && airT !== undefined && soilT !== null && soilT !== undefined) {
+      hysteresisPoints.push({ x: Number(Number(airT).toFixed(2)), y: Number(Number(soilT).toFixed(2)) });
+    }
+  });
+
+  if (thermalHysteresisChart) {
+    thermalHysteresisChart.data.datasets[0].data = hysteresisPoints;
+    thermalHysteresisChart.update();
+  }
+
+  // 2. Capillary Recharge vs Evapotranspiration Rate (dθ/dt in %/hr)
+  const dynLabels = [];
+  const rateData = [];
+  const rateColors = [];
+
+  for (let i = 1; i < sampled.length; i++) {
+    const prev = sampled[i - 1];
+    const curr = sampled[i];
+    const tPrev = parseRecordTimestampMs(prev);
+    const tCurr = parseRecordTimestampMs(curr);
+    const mPrev = prev.CapMoisture_Pct ?? 50;
+    const mCurr = curr.CapMoisture_Pct ?? 50;
+
+    if (tCurr > tPrev && (tCurr - tPrev < 3600000 * 8)) {
+      const dtHours = (tCurr - tPrev) / 3600000;
+      if (dtHours > 0.005) {
+        let rate = (mCurr - mPrev) / dtHours;
+        rate = Math.max(-15, Math.min(15, rate)); // Clamp outliers to +/- 15 %/hr
+
+        const timeStr = curr.Time ? curr.Time.substring(0, 5) : "";
+        dynLabels.push(timeStr);
+        rateData.push(Number(rate.toFixed(2)));
+        rateColors.push(rate >= 0 ? "rgba(16, 185, 129, 0.75)" : "rgba(245, 158, 11, 0.75)");
+      }
+    }
+  }
+
+  if (capillaryDynamicsChart) {
+    capillaryDynamicsChart.data.labels = dynLabels;
+    capillaryDynamicsChart.data.datasets[0].data = rateData;
+    capillaryDynamicsChart.data.datasets[0].backgroundColor = rateColors;
+    capillaryDynamicsChart.update();
+  }
+
+  // 3. Dew Point & Condensation / Fungal Risk Margin
+  const dewLabels = [];
+  const dewMarginData = [];
+  const critLimitData = [];
+
+  sampled.forEach(r => {
+    const airT = r.BME_AirTemp_C ?? r.AHT_AirTemp_C ?? r.AirTemp_C;
+    const airH = r.BME_AirHumidity_Pct ?? r.AHT_AirHumidity_Pct ?? r.AirHumidity_Pct;
+    if (airT !== null && airT !== undefined && airH !== null && airH !== undefined) {
+      const td = calculateDewPoint(airT, airH);
+      if (td !== null) {
+        const margin = Math.max(0, airT - td);
+        const timeStr = r.Time ? r.Time.substring(0, 5) : "";
+        dewLabels.push(timeStr);
+        dewMarginData.push(Number(margin.toFixed(2)));
+        critLimitData.push(1.5);
+      }
+    }
+  });
+
+  if (dewPointRiskChart) {
+    dewPointRiskChart.data.labels = dewLabels;
+    dewPointRiskChart.data.datasets[0].data = dewMarginData;
+    dewPointRiskChart.data.datasets[1].data = critLimitData;
+    dewPointRiskChart.update();
+  }
+
+  // 4. Dual Sensor Discrepancy & Salinity Index
+  const salLabels = [];
+  const salDiffData = [];
+
+  sampled.forEach(r => {
+    const c = r.CapMoisture_Pct;
+    const res = r.ResMoisture_Pct;
+    if (c !== null && c !== undefined && res !== null && res !== undefined) {
+      const diff = c - res;
+      const timeStr = r.Time ? r.Time.substring(0, 5) : "";
+      salLabels.push(timeStr);
+      salDiffData.push(Number(diff.toFixed(1)));
+    }
+  });
+
+  if (salinityDiscrepancyChart) {
+    salinityDiscrepancyChart.data.labels = salLabels;
+    salinityDiscrepancyChart.data.datasets[0].data = salDiffData;
+    salinityDiscrepancyChart.update();
   }
 }
 

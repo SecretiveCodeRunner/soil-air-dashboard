@@ -48,6 +48,10 @@
           <i class="fa-solid fa-chart-line"></i>
           <span>Waveforms</span>
         </button>
+        <button class="nav-item" data-target="view-research">
+          <i class="fa-solid fa-flask"></i>
+          <span>Research Lab</span>
+        </button>
         <button class="nav-item" data-target="view-logs">
           <i class="fa-solid fa-list-check"></i>
           <span>History Log</span>
@@ -334,6 +338,72 @@
           </div>
           <div class="chart-container">
             <canvas id="pressureChart"></canvas>
+          </div>
+        </div>
+
+      </section>
+    </div>
+
+    <!-- VIEW TAB: ADVANCED RESEARCH & ANALYTICS LAB -->
+    <div class="view-panel web-only-feature" id="view-research">
+      
+      <!-- Research Lab Overview Banner -->
+      <div class="research-header-banner">
+        <div class="banner-title">
+          <i class="fa-solid fa-flask color-cap"></i>
+          <div>
+            <h3>Agronomic & Soil-Hydrology Research Lab</h3>
+            <p>Empirical phase portraits, capillary dynamics, dew point condensation margins, and dielectric metrology.</p>
+          </div>
+        </div>
+        <div class="research-stats-pill" id="research-records-badge">
+          <i class="fa-solid fa-database"></i> High-Fidelity Dataset
+        </div>
+      </div>
+
+      <section class="charts-grid">
+        
+        <!-- 1. Soil Thermal Hysteresis Phase Portrait -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3><i class="fa-solid fa-arrows-spin color-temp"></i> Soil Thermal Lag & Hysteresis</h3>
+            <span class="live-pill"><i class="fa-solid fa-circle"></i> T_soil vs T_air Phase Loop</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="thermalHysteresisChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 2. Capillary Recharge vs Evapotranspiration Rate -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3><i class="fa-solid fa-chart-column color-aht"></i> Moisture Dynamics (dθ/dt Rate)</h3>
+            <span class="live-pill"><i class="fa-solid fa-circle"></i> Capillary Rise vs Drying (%/hr)</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="capillaryDynamicsChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 3. Dew Point & Condensation / Fungal Risk Margin -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3><i class="fa-solid fa-biohazard color-bme"></i> Dew Point & Condensation Margin</h3>
+            <span class="live-pill"><i class="fa-solid fa-circle"></i> Leaf Wetness Proximity (ΔT_dew)</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="dewPointRiskChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 4. Dual Sensor Discrepancy & Salinity Index -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3><i class="fa-solid fa-scale-balanced color-hum"></i> Dielectric vs Conductive Discrepancy</h3>
+            <span class="live-pill"><i class="fa-solid fa-circle"></i> Cap vs Res Salinity Offset</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="salinityDiscrepancyChart"></canvas>
           </div>
         </div>
 
