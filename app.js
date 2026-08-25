@@ -933,7 +933,7 @@ async function getShallowHistoryKeys(basePath) {
   return cachedShallowKeys || [];
 }
 
-// 1. Dynamic Historical Timeline Fetcher (Samples timeline to ~1,000 high-resolution points)
+// 1. Dynamic Historical Timeline Fetcher (Samples timeline to ~300 high-resolution points)
 async function fetchHistoricalTimeline(rangeMode = "24h") {
   if (isDemoActive) return;
   const basePath = getActiveDeviceBasePath();
@@ -945,23 +945,22 @@ async function fetchHistoricalTimeline(rangeMode = "24h") {
     let targetKeys = [];
     const totalKeys = allKeys.length;
 
-    // 10s sample interval: 6/min = 360/hr = 8640/day
     if (rangeMode === "15m") {
       targetKeys = allKeys.slice(-90);
     } else if (rangeMode === "1h") {
-      targetKeys = allKeys.slice(-360);
+      targetKeys = allKeys.slice(-240);
     } else if (rangeMode === "24h") {
       const last24h = allKeys.slice(-8640);
-      const step = Math.max(1, Math.floor(last24h.length / 1000));
+      const step = Math.max(1, Math.floor(last24h.length / 300));
       for (let i = 0; i < last24h.length; i += step) targetKeys.push(last24h[i]);
       if (targetKeys[targetKeys.length - 1] !== last24h[last24h.length - 1]) targetKeys.push(last24h[last24h.length - 1]);
     } else if (rangeMode === "7d") {
       const last7d = allKeys.slice(-60480);
-      const step = Math.max(1, Math.floor(last7d.length / 1200));
+      const step = Math.max(1, Math.floor(last7d.length / 400));
       for (let i = 0; i < last7d.length; i += step) targetKeys.push(last7d[i]);
       if (targetKeys[targetKeys.length - 1] !== last7d[last7d.length - 1]) targetKeys.push(last7d[last7d.length - 1]);
     } else if (rangeMode === "all") {
-      const step = Math.max(1, Math.floor(totalKeys / 1200));
+      const step = Math.max(1, Math.floor(totalKeys / 500));
       for (let i = 0; i < totalKeys; i += step) targetKeys.push(allKeys[i]);
       if (targetKeys[targetKeys.length - 1] !== allKeys[totalKeys - 1]) targetKeys.push(allKeys[totalKeys - 1]);
     } else {
@@ -971,28 +970,22 @@ async function fetchHistoricalTimeline(rangeMode = "24h") {
     const token = await getFirebaseIdToken();
     const authQuery = token ? `?auth=${token}` : '';
 
-    // Parallel fetch in fast batches of 60
-    const batchSize = 60;
-    const allResults = [];
-    for (let i = 0; i < targetKeys.length; i += batchSize) {
-      const chunk = targetKeys.slice(i, i + batchSize);
-      const chunkRes = await Promise.all(chunk.map(async k => {
-        try {
-          const r = await fetch(`${FIREBASE_BASE_URL}${basePath}/History/${k}.json${authQuery}`);
-          return r.ok ? await r.json() : null;
-        } catch (e) {
-          return null;
-        }
-      }));
-      allResults.push(...chunkRes);
-    }
+    const pointPromises = targetKeys.map(async k => {
+      try {
+        const r = await fetch(`${FIREBASE_BASE_URL}${basePath}/History/${k}.json${authQuery}`);
+        return r.ok ? await r.json() : null;
+      } catch (e) {
+        return null;
+      }
+    });
 
-    const validPoints = allResults.filter(p => p && (p.Time || p.Timestamp));
+    const results = await Promise.all(pointPromises);
+    const validPoints = results.filter(p => p && (p.Time || p.Timestamp));
 
     if (validPoints.length > 0) {
       rawTelemetryHistory = validPoints;
       try {
-        localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(rawTelemetryHistory.slice(-500)));
+        localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(rawTelemetryHistory.slice(-300)));
       } catch (e) {}
       applyTimeFilter();
     }
@@ -1013,7 +1006,7 @@ async function fetchTelemetryData() {
 
   const basePath = getActiveDeviceBasePath();
   try {
-    const token = firebaseIdToken;
+    const token = firebaseIdToken || (await getFirebaseIdToken());
     const authParam = token ? `?auth=${token}` : '';
     const liveUrl = `${FIREBASE_BASE_URL}${basePath}/Live.json${authParam}`;
 
@@ -1074,7 +1067,6 @@ function processLiveReading(liveRec) {
 
   if (!lastPoint || lastStamp !== pointTimestamp) {
     rawTelemetryHistory.push(liveRec);
-    // Keep max 300 points in memory so memory/DOM stays lightweight
     if (rawTelemetryHistory.length > 300) {
       rawTelemetryHistory.shift();
     }
@@ -1098,17 +1090,16 @@ function processLiveReading(liveRec) {
 async function startFirebasePolling() {
   if (firebasePollingTimer) clearInterval(firebasePollingTimer);
 
-  // A. Initial historical fetch (once)
-  await fetchInitialHistory();
-
-  // B. Initial live poll & actuator sync
-  await fetchTelemetryData();
+  // A. Fire live poll & actuator sync IMMEDIATELY (instant ESP32 status in ~100ms)
+  fetchTelemetryData();
   fetchActuatorNodeStatus();
+
+  // B. Fetch historical timeline in background without blocking live poller
+  fetchInitialHistory();
 
   // C. Polling interval: live is only ~300 bytes
   let pollInterval = 3500;
   firebasePollingTimer = setInterval(async () => {
-    // Throttling if tab is hidden to save mobile/laptop battery & data
     if (document.hidden) return;
     await fetchTelemetryData();
   }, pollInterval);
