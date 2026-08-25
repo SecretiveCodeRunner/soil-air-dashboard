@@ -615,6 +615,18 @@ function initCharts() {
     maintainAspectRatio: false,
     spanGaps: false, // Breaks line graph during real power-off gaps
     animation: { duration: 250 },
+    elements: {
+      point: {
+        radius: 0,
+        hoverRadius: 5,
+        hitRadius: 10
+      },
+      line: {
+        tension: 0.35,
+        borderCapStyle: 'round',
+        borderJoinStyle: 'round'
+      }
+    },
     scales: {
       x: {
         grid: { color: "rgba(255, 255, 255, 0.04)" },
@@ -1264,10 +1276,10 @@ function updateCharts(records) {
       const shortTime = r.Time.substring(0, 5);
       timeLabel = `${shortDate} ${shortTime}`;
     } else if (r.Time) {
-      timeLabel = r.Time.length > 5 ? r.Time.substring(0, 8) : r.Time;
+      timeLabel = r.Time.substring(0, 5);
     } else if (r.Timestamp) {
       const parts = r.Timestamp.split("T");
-      timeLabel = parts.length > 1 ? parts[1].replace("Z", "").substring(0, 8) : r.Timestamp;
+      timeLabel = parts.length > 1 ? parts[1].replace("Z", "").substring(0, 5) : r.Timestamp;
     }
 
     labels.push(timeLabel);

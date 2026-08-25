@@ -1567,7 +1567,59 @@ input:checked + .slider:before {
   }
 }
 
+/* DESKTOP STUDIO WEB EXPERIENCE VS MOBILE APP */
 @media (min-width: 768px) {
+  body {
+    padding-bottom: 24px;
+  }
+
+  .bottom-nav {
+    position: static;
+    height: auto;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-md);
+    padding: 6px 10px;
+    margin-bottom: 16px;
+    justify-content: flex-start;
+    gap: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  }
+
+  .nav-item {
+    flex-direction: row;
+    max-width: none;
+    flex: initial;
+    padding: 8px 18px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    gap: 8px;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+  }
+
+  .nav-item i {
+    font-size: 14px;
+  }
+
+  .nav-item.active {
+    background: rgba(0, 242, 254, 0.12);
+    border: 1px solid rgba(0, 242, 254, 0.3);
+    color: #00f2fe;
+    box-shadow: 0 0 12px rgba(0, 242, 254, 0.15);
+  }
+
+  .nav-item:hover:not(.active) {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+  }
+
+  .fab-btn {
+    bottom: 28px;
+    right: 28px;
+  }
+
   .metrics-row {
     grid-template-columns: repeat(4, 1fr);
   }
@@ -1580,5 +1632,9 @@ input:checked + .slider:before {
   .diagnostics-grid {
     grid-template-columns: repeat(3, 1fr);
   }
+  .control-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
+
 
