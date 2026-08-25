@@ -552,6 +552,9 @@ function applyTimeFilter() {
   } else if (activeRangeMode === "24h") {
     cutoffMs = now - (24 * 60 * 60 * 1000);
     summaryText = `Last 24 hours timeline (${rawTelemetryHistory.length} sampled points)`;
+  } else if (activeRangeMode === "3d") {
+    cutoffMs = now - (3 * 24 * 60 * 60 * 1000);
+    summaryText = `Last 3 days timeline (${rawTelemetryHistory.length} sampled points)`;
   } else if (activeRangeMode === "7d") {
     cutoffMs = now - (7 * 24 * 60 * 60 * 1000);
     summaryText = `Last 7 days timeline (${rawTelemetryHistory.length} sampled points)`;
@@ -1124,6 +1127,11 @@ async function fetchHistoricalTimeline(rangeMode = "24h") {
       const step = Math.max(1, Math.floor(last24h.length / 300));
       for (let i = 0; i < last24h.length; i += step) targetKeys.push(last24h[i]);
       if (targetKeys[targetKeys.length - 1] !== last24h[last24h.length - 1]) targetKeys.push(last24h[last24h.length - 1]);
+    } else if (rangeMode === "3d") {
+      const last3d = allKeys.slice(-25920);
+      const step = Math.max(1, Math.floor(last3d.length / 400));
+      for (let i = 0; i < last3d.length; i += step) targetKeys.push(last3d[i]);
+      if (targetKeys[targetKeys.length - 1] !== last3d[last3d.length - 1]) targetKeys.push(last3d[last3d.length - 1]);
     } else if (rangeMode === "7d") {
       const last7d = allKeys.slice(-60480);
       const step = Math.max(1, Math.floor(last7d.length / 400));
@@ -1673,24 +1681,35 @@ function updateResearchLab(records) {
   const rateData = [];
   const rateColors = [];
 
-  for (let i = 1; i < sampled.length; i++) {
-    const prev = sampled[i - 1];
+  // Use rolling central-difference derivative (5-point span) to eliminate single-sample integer jitter
+  const radius = Math.min(2, Math.floor(sampled.length / 10));
+  for (let i = radius; i < sampled.length - radius; i++) {
+    const prev = sampled[i - radius];
+    const next = sampled[i + radius];
     const curr = sampled[i];
     const tPrev = parseRecordTimestampMs(prev);
-    const tCurr = parseRecordTimestampMs(curr);
+    const tNext = parseRecordTimestampMs(next);
     const mPrev = prev.CapMoisture_Pct ?? 50;
-    const mCurr = curr.CapMoisture_Pct ?? 50;
+    const mNext = next.CapMoisture_Pct ?? 50;
 
-    if (tCurr > tPrev && (tCurr - tPrev < 3600000 * 8)) {
-      const dtHours = (tCurr - tPrev) / 3600000;
-      if (dtHours > 0.005) {
-        let rate = (mCurr - mPrev) / dtHours;
-        rate = Math.max(-15, Math.min(15, rate)); // Clamp outliers to +/- 15 %/hr
+    if (tNext > tPrev && (tNext - tPrev < 3600000 * 12)) {
+      const dtHours = (tNext - tPrev) / 3600000;
+      if (dtHours > 0.02) {
+        let rate = (mNext - mPrev) / dtHours;
+        rate = Math.max(-8, Math.min(8, rate)); // Clamp physical rates to +/- 8 %/hr
 
-        const timeStr = curr.Time ? curr.Time.substring(0, 5) : "";
+        let timeStr = "";
+        if (curr.Date && curr.Time) {
+          const p = curr.Date.split("-");
+          timeStr = p.length === 3 ? `${p[1]}/${p[2]} ${curr.Time.substring(0, 5)}` : `${curr.Date} ${curr.Time.substring(0, 5)}`;
+        } else if (curr.Time) {
+          timeStr = curr.Time.substring(0, 5);
+        }
+
         dynLabels.push(timeStr);
         rateData.push(Number(rate.toFixed(2)));
-        rateColors.push(rate >= 0 ? "rgba(16, 185, 129, 0.75)" : "rgba(245, 158, 11, 0.75)");
+        // Green: Capillary Rise / Vapor Absorption (+), Amber: Solar Evaporative Drying (-)
+        rateColors.push(rate >= 0 ? "rgba(16, 185, 129, 0.85)" : "rgba(245, 158, 11, 0.85)");
       }
     }
   }
@@ -1714,7 +1733,14 @@ function updateResearchLab(records) {
       const td = calculateDewPoint(airT, airH);
       if (td !== null) {
         const margin = Math.max(0, airT - td);
-        const timeStr = r.Time ? r.Time.substring(0, 5) : "";
+        let timeStr = "";
+        if (r.Date && r.Time) {
+          const p = r.Date.split("-");
+          timeStr = p.length === 3 ? `${p[1]}/${p[2]} ${r.Time.substring(0, 5)}` : `${r.Date} ${r.Time.substring(0, 5)}`;
+        } else if (r.Time) {
+          timeStr = r.Time.substring(0, 5);
+        }
+
         dewLabels.push(timeStr);
         dewMarginData.push(Number(margin.toFixed(2)));
         critLimitData.push(1.5);
@@ -1738,7 +1764,13 @@ function updateResearchLab(records) {
     const res = r.ResMoisture_Pct;
     if (c !== null && c !== undefined && res !== null && res !== undefined) {
       const diff = c - res;
-      const timeStr = r.Time ? r.Time.substring(0, 5) : "";
+      let timeStr = "";
+      if (r.Date && r.Time) {
+        const p = r.Date.split("-");
+        timeStr = p.length === 3 ? `${p[1]}/${p[2]} ${r.Time.substring(0, 5)}` : `${r.Date} ${r.Time.substring(0, 5)}`;
+      } else if (r.Time) {
+        timeStr = r.Time.substring(0, 5);
+      }
       salLabels.push(timeStr);
       salDiffData.push(Number(diff.toFixed(1)));
     }
