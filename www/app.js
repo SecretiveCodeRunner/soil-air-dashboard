@@ -613,15 +613,15 @@ function initCharts() {
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    spanGaps: false, // Breaks line graph during power-off gaps
-    animation: { duration: 300 },
+    spanGaps: false, // Breaks line graph during real power-off gaps
+    animation: { duration: 250 },
     scales: {
       x: {
-        grid: { color: "rgba(255, 255, 255, 0.05)" },
-        ticks: { color: "#64748b", font: { family: "JetBrains Mono", size: 10 } }
+        grid: { color: "rgba(255, 255, 255, 0.04)" },
+        ticks: { color: "#64748b", font: { family: "JetBrains Mono", size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
       },
       y: {
-        grid: { color: "rgba(255, 255, 255, 0.05)" },
+        grid: { color: "rgba(255, 255, 255, 0.04)" },
         ticks: { color: "#94a3b8", font: { family: "JetBrains Mono", size: 11 } }
       }
     },
@@ -645,9 +645,10 @@ function initCharts() {
               borderColor: "#ff5e62",
               backgroundColor: "rgba(255, 94, 98, 0.12)",
               fill: false,
-              tension: 0.25,
-              borderWidth: 2,
-              pointRadius: 2,
+              tension: 0.35,
+              borderWidth: 2.2,
+              pointRadius: 0,
+              pointHoverRadius: 5,
               data: []
             },
             {
@@ -655,9 +656,10 @@ function initCharts() {
               borderColor: "#38ef7d",
               backgroundColor: "rgba(56, 239, 125, 0.08)",
               fill: false,
-              tension: 0.25,
-              borderWidth: 2,
-              pointRadius: 2,
+              tension: 0.35,
+              borderWidth: 2.2,
+              pointRadius: 0,
+              pointHoverRadius: 5,
               data: []
             },
             {
@@ -665,9 +667,10 @@ function initCharts() {
               borderColor: "#ff9966",
               backgroundColor: "transparent",
               borderDash: [5, 5],
-              tension: 0.25,
+              tension: 0.35,
               borderWidth: 2,
-              pointRadius: 2,
+              pointRadius: 0,
+              pointHoverRadius: 5,
               data: []
             }
           ]
@@ -690,9 +693,10 @@ function initCharts() {
               borderColor: "#00f2fe",
               backgroundColor: "rgba(0, 242, 254, 0.12)",
               fill: true,
-              tension: 0.25,
-              borderWidth: 2,
-              pointRadius: 2,
+              tension: 0.35,
+              borderWidth: 2.2,
+              pointRadius: 0,
+              pointHoverRadius: 5,
               data: []
             },
             {
@@ -700,9 +704,10 @@ function initCharts() {
               borderColor: "#38ef7d",
               backgroundColor: "rgba(56, 239, 125, 0.08)",
               fill: true,
-              tension: 0.25,
-              borderWidth: 2,
-              pointRadius: 2,
+              tension: 0.35,
+              borderWidth: 2.2,
+              pointRadius: 0,
+              pointHoverRadius: 5,
               data: []
             }
           ]
@@ -725,9 +730,10 @@ function initCharts() {
               borderColor: "#00f2fe",
               backgroundColor: "rgba(0, 242, 254, 0.15)",
               fill: true,
-              tension: 0.25,
-              borderWidth: 2,
-              pointRadius: 2,
+              tension: 0.35,
+              borderWidth: 2.2,
+              pointRadius: 0,
+              pointHoverRadius: 5,
               data: []
             },
             {
@@ -735,9 +741,10 @@ function initCharts() {
               borderColor: "#4facfe",
               backgroundColor: "rgba(79, 172, 254, 0.1)",
               fill: true,
-              tension: 0.25,
-              borderWidth: 2,
-              pointRadius: 2,
+              tension: 0.35,
+              borderWidth: 2.2,
+              pointRadius: 0,
+              pointHoverRadius: 5,
               data: []
             }
           ]
@@ -760,9 +767,10 @@ function initCharts() {
               borderColor: "#a855f7",
               backgroundColor: "rgba(168, 85, 247, 0.12)",
               fill: true,
-              tension: 0.25,
-              borderWidth: 2,
-              pointRadius: 2,
+              tension: 0.35,
+              borderWidth: 2.2,
+              pointRadius: 0,
+              pointHoverRadius: 5,
               data: []
             }
           ]
@@ -1211,14 +1219,30 @@ function updateCharts(records) {
   const resMoistData = [];
   const pressData = [];
 
+  // Calculate dynamic adaptive gap threshold based on the actual time span
+  let firstMs = 0;
+  let lastSampleMs = 0;
+  for (let i = 0; i < sampledRecords.length; i++) {
+    const t = parseRecordTimestampMs(sampledRecords[i]);
+    if (t > 0) {
+      if (firstMs === 0) firstMs = t;
+      lastSampleMs = t;
+    }
+  }
+  const totalSpanMs = Math.max(0, lastSampleMs - firstMs);
+  const avgIntervalMs = sampledRecords.length > 1 ? (totalSpanMs / (sampledRecords.length - 1)) : 10000;
+  // Adaptive gap threshold: only break curve if an outage is at least 3.5x the average interval and > 5 min
+  const maxGapMs = Math.max(300000, avgIntervalMs * 3.5);
+
+  const isMultiDay = totalSpanMs > (24 * 3600 * 1000);
+
   let prevMs = 0;
-  const maxGapMs = 90000;
 
   sampledRecords.forEach((r) => {
     const currentMs = parseRecordTimestampMs(r);
 
     if (prevMs > 0 && currentMs > 0 && (currentMs - prevMs > maxGapMs)) {
-      labels.push("OFFLINE GAP");
+      labels.push("GAP");
       bmeTempData.push(null);
       ahtTempData.push(null);
       soilTempData.push(null);
@@ -1234,11 +1258,16 @@ function updateCharts(records) {
     prevMs = currentMs;
 
     let timeLabel = "";
-    if (r.Time) {
-      timeLabel = r.Time;
+    if (isMultiDay && r.Date && r.Time) {
+      const dateParts = r.Date.split("-");
+      const shortDate = dateParts.length === 3 ? `${dateParts[1]}/${dateParts[2]}` : r.Date;
+      const shortTime = r.Time.substring(0, 5);
+      timeLabel = `${shortDate} ${shortTime}`;
+    } else if (r.Time) {
+      timeLabel = r.Time.length > 5 ? r.Time.substring(0, 8) : r.Time;
     } else if (r.Timestamp) {
       const parts = r.Timestamp.split("T");
-      timeLabel = parts.length > 1 ? parts[1].replace("Z", "") : r.Timestamp;
+      timeLabel = parts.length > 1 ? parts[1].replace("Z", "").substring(0, 8) : r.Timestamp;
     }
 
     labels.push(timeLabel);
@@ -1253,25 +1282,6 @@ function updateCharts(records) {
     resMoistData.push(r.ResMoisture_Pct ?? null);
     pressData.push(r.BME_AirPressure_hPa ?? r.AirPressure_hPa ?? null);
   });
-
-  const lastRecordMs = prevMs;
-  const nowMs = Date.now();
-  if (lastRecordMs > 0 && (nowMs - lastRecordMs > 60000)) {
-    const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    labels.push("OFFLINE GAP");
-    labels.push(`Now (${nowTimeStr})`);
-
-    bmeTempData.push(null); bmeTempData.push(null);
-    ahtTempData.push(null); ahtTempData.push(null);
-    soilTempData.push(null); soilTempData.push(null);
-
-    bmeHumData.push(null); bmeHumData.push(null);
-    ahtHumData.push(null); ahtHumData.push(null);
-
-    capMoistData.push(null); capMoistData.push(null);
-    resMoistData.push(null); resMoistData.push(null);
-    pressData.push(null); pressData.push(null);
-  }
 
   if (temperatureChart) {
     temperatureChart.data.labels = labels;
