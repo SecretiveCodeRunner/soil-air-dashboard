@@ -86,7 +86,7 @@ let activeDeviceId = "ESP32-SOIL-AIR-01";
 const isNativeApp = (typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
 // ============================================================================
-// DIGITAL SIGNAL PROCESSING (DSP) & SCIENTIFIC ANALYTICS ENGINE
+// DIGITAL SIGNAL PROCESSING (DSP) & DUAL-SENSOR FUSION ENGINE
 // ============================================================================
 function dspMedianFilter(arr, windowSize = 5) {
   const half = Math.floor(windowSize / 2);
@@ -108,6 +108,16 @@ function dspCalibrateCapacitive(raw) {
   const norm = (dry - raw) / (dry - wet);
   const curve = Math.pow(norm, 1.15) * 100;
   return Math.min(100, Math.max(0, curve));
+}
+
+function dspCalibrateResistive(raw) {
+  if (raw === null || isNaN(raw)) return null;
+  const dry = 3500;
+  const wet = 1000;
+  if (raw >= dry) return 0;
+  if (raw <= wet) return 100;
+  const norm = (dry - raw) / (dry - wet);
+  return Math.min(100, Math.max(0, norm * 100));
 }
 
 function dspCompensateMoistureTemperature(moistPct, soilTempC, refTemp = 25.0) {
@@ -132,14 +142,52 @@ function dspIirSmooth(arr, alpha = 0.25) {
 
 function processMoistureDSP(records) {
   if (!records || records.length === 0) return [];
+  
   const rawCapArray = records.map(r => r.CapMoisture_Raw ?? 2040);
+  const rawResArray = records.map(r => r.ResMoisture_Raw ?? 3500);
+  
   const medCap = dspMedianFilter(rawCapArray, 5);
-  const calibCapComp = medCap.map((adc, i) => {
-    const rawPct = dspCalibrateCapacitive(adc);
+  const medRes = dspMedianFilter(rawResArray, 5);
+
+  let prevFused = null;
+  const fusedSeries = medCap.map((capAdc, i) => {
+    const resAdc = medRes[i];
     const soilT = records[i] ? (records[i].SoilTemp_C ?? 25.0) : 25.0;
-    return dspCompensateMoistureTemperature(rawPct, soilT, 25.0);
+
+    // 1. Plausibility & Hardware Limits
+    const isCapValid = (capAdc >= 700 && capAdc <= 2300);
+    const isResValid = (resAdc >= 400 && resAdc <= 3800);
+
+    const capPct = isCapValid ? dspCalibrateCapacitive(capAdc) : null;
+    const resPct = isResValid ? dspCalibrateResistive(resAdc) : null;
+
+    // 2. Glitch Detection & Confidence Weighting
+    let wCap = isCapValid ? 0.80 : 0.0;
+    let wRes = isResValid ? 0.20 : 0.0;
+
+    // If capacitive jumps by >25% instantaneously, shift confidence to resistive
+    if (prevFused !== null && isCapValid && capPct !== null) {
+      if (Math.abs(capPct - prevFused) > 25.0 && isResValid) {
+        wCap = 0.15;
+        wRes = 0.85;
+      }
+    }
+
+    const totalWeight = wCap + wRes;
+    let fused = 50.0;
+    if (totalWeight > 0) {
+      fused = ((capPct ?? 50) * wCap + (resPct ?? 50) * wRes) / totalWeight;
+    } else {
+      fused = prevFused ?? 50.0;
+    }
+
+    // 3. Thermal Dielectric Compensation
+    const compensated = dspCompensateMoistureTemperature(fused, soilT, 25.0);
+    prevFused = compensated;
+    return compensated;
   });
-  return dspIirSmooth(calibCapComp, 0.25);
+
+  return dspIirSmooth(fusedSeries, 0.25);
 }
 
 function calculateVPD(airTempC, airHumPct) {
@@ -1443,9 +1491,19 @@ function updateDashboardUI() {
     }
 
     const latestCapRaw = latest.CapMoisture_Raw ?? 2040;
+    const latestResRaw = latest.ResMoisture_Raw ?? 3500;
     const latestSoilT = latest.SoilTemp_C ?? 25.0;
-    const dspCalib = dspCalibrateCapacitive(latestCapRaw);
-    const dspComp = dspCompensateMoistureTemperature(dspCalib, latestSoilT, 25.0);
+
+    const isCapValid = (latestCapRaw >= 700 && latestCapRaw <= 2300);
+    const isResValid = (latestResRaw >= 400 && latestResRaw <= 3800);
+    const capPct = isCapValid ? dspCalibrateCapacitive(latestCapRaw) : null;
+    const resPct = isResValid ? dspCalibrateResistive(latestResRaw) : null;
+    const wCap = isCapValid ? 0.80 : 0.0;
+    const wRes = isResValid ? 0.20 : 0.0;
+    const totalW = wCap + wRes;
+    const rawFused = totalW > 0 ? (((capPct ?? 50) * wCap + (resPct ?? 50) * wRes) / totalW) : 50.0;
+    const dspComp = dspCompensateMoistureTemperature(rawFused, latestSoilT, 25.0);
+
     const elDspMoist = document.getElementById("val-dsp-moist");
     if (elDspMoist && dspComp !== null) elDspMoist.innerHTML = `${formatNum(dspComp, 0)} <span class="unit">%</span>`;
   }
