@@ -216,6 +216,7 @@ let thermalHysteresisChart = null;
 let capillaryDynamicsChart = null;
 let dewPointRiskChart = null;
 let salinityDiscrepancyChart = null;
+let vpdWaveformChart = null;
 
 // DOM Elements
 const elStatusBadge = document.getElementById("connection-status");
@@ -1105,6 +1106,41 @@ function initCharts() {
           }
         });
       }
+
+      // 5. Vapor Pressure Deficit (VPD) Waveform
+      const elVpdCanvas = document.getElementById("vpdWaveformChart");
+      if (elVpdCanvas) {
+        const ctxVpd = elVpdCanvas.getContext("2d");
+        vpdWaveformChart = new Chart(ctxVpd, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "Atmospheric Vapor Pressure Deficit (kPa)",
+                data: [],
+                borderColor: "#ec4899",
+                backgroundColor: "rgba(236, 72, 153, 0.15)",
+                fill: true,
+                tension: 0.35,
+                borderWidth: 2.2,
+                pointRadius: 0
+              }
+            ]
+          },
+          options: {
+            ...chartOptions,
+            scales: {
+              x: { grid: { display: false }, ticks: { color: "#8a99ad" } },
+              y: {
+                title: { display: true, text: "VPD (kPa)", color: "#8a99ad", font: { size: 11, weight: 'bold' } },
+                grid: { color: "rgba(255, 255, 255, 0.05)" },
+                ticks: { color: "#8a99ad" }
+              }
+            }
+          }
+        });
+      }
     }
   } catch (err) {
     console.error("Error initializing Chart.js waveforms:", err);
@@ -1838,6 +1874,35 @@ function updateResearchLab(records) {
     salinityDiscrepancyChart.data.labels = salLabels;
     salinityDiscrepancyChart.data.datasets[0].data = salDiffData;
     salinityDiscrepancyChart.update();
+  }
+
+  // 5. Vapor Pressure Deficit (VPD) Waveform
+  const vpdLabels = [];
+  const vpdValues = [];
+
+  sampled.forEach(r => {
+    const airT = r.BME_AirTemp_C ?? r.AHT_AirTemp_C ?? r.AirTemp_C;
+    const airH = r.BME_AirHumidity_Pct ?? r.AHT_AirHumidity_Pct ?? r.AirHumidity_Pct;
+    if (airT !== null && airT !== undefined && airH !== null && airH !== undefined) {
+      const vpd = calculateVPD(airT, airH);
+      if (vpd !== null) {
+        let timeStr = "";
+        if (r.Date && r.Time) {
+          const p = r.Date.split("-");
+          timeStr = p.length === 3 ? `${p[1]}/${p[2]} ${r.Time.substring(0, 5)}` : `${r.Date} ${r.Time.substring(0, 5)}`;
+        } else if (r.Time) {
+          timeStr = r.Time.substring(0, 5);
+        }
+        vpdLabels.push(timeStr);
+        vpdValues.push(Number(vpd.toFixed(2)));
+      }
+    }
+  });
+
+  if (vpdWaveformChart) {
+    vpdWaveformChart.data.labels = vpdLabels;
+    vpdWaveformChart.data.datasets[0].data = vpdValues;
+    vpdWaveformChart.update();
   }
 }
 
