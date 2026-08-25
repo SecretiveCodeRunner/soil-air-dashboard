@@ -470,33 +470,40 @@ body.theme-light .active-device-banner {
 .metric-stats {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 3px 6px;
   margin: 6px 0;
-  padding: 4px 8px;
+  padding: 4px 6px;
   background: rgba(11, 15, 25, 0.5);
   border-radius: var(--radius-sm);
   border: 1px solid rgba(255, 255, 255, 0.04);
+  overflow: hidden;
 }
 
 .stat-item {
-  font-size: 10.5px;
+  font-size: 9.5px;
   color: var(--text-secondary);
   font-family: var(--font-mono);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  white-space: nowrap;
 }
 
 .stat-max i {
   color: #f87171;
+  font-size: 8.5px;
 }
 
 .stat-min i {
   color: #34d399;
+  font-size: 8.5px;
 }
 
 .stat-item strong {
   color: var(--text-primary);
+  font-weight: 600;
 }
 
 /* COLOR TOKENS */
@@ -1543,8 +1550,18 @@ input:checked + .slider:before {
 
 @media (max-width: 600px) {
   .metrics-row {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
     gap: 8px;
+  }
+  .metric-card {
+    padding: 10px 10px;
+    overflow: hidden;
+  }
+  .metric-value {
+    font-size: 20px;
+  }
+  .card-title {
+    font-size: 11px;
   }
   .system-banner {
     flex-direction: column;
