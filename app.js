@@ -69,10 +69,18 @@ async function getFirebaseIdToken() {
 }
 
 // Telemetry State
-
-// Telemetry State
 let rawTelemetryHistory = [];
 let filteredHistory = [];
+let activeRangeMode = "24h";
+let isDemoActive = false;
+let demoIntervalTimer = null;
+
+// Registered Devices & Multi-Node State
+let registeredDevices = [
+  { id: "ESP32-SOIL-AIR-01", name: "ESP32 Main Suite", path: "SensorData/SoilAirSuite", type: "ESP32" },
+  { id: "ESP32-GREENHOUSE-02", name: "Greenhouse Polyhouse Node", path: "SensorData/Greenhouse02", type: "ESP32" }
+];
+let activeDeviceId = "ESP32-SOIL-AIR-01";
 
 // Platform Detection: Native Capacitor APK vs Web Dashboard
 const isNativeApp = (typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
@@ -1958,12 +1966,6 @@ async function fetchActuatorNodeStatus() {
 // ============================================================================
 // USER ACCOUNT & MULTI-DEVICE MANAGEMENT MODULE
 // ============================================================================
-let registeredDevices = [
-  { id: "ESP32-SOIL-AIR-01", name: "ESP32 Main Suite", path: "SensorData/SoilAirSuite", type: "ESP32" },
-  { id: "ESP32-GREENHOUSE-02", name: "Greenhouse Polyhouse Node", path: "SensorData/Greenhouse02", type: "ESP32" }
-];
-let activeDeviceId = "ESP32-SOIL-AIR-01";
-
 function initMultiDeviceManager() {
   const savedDevs = localStorage.getItem("soil_air_devices");
   if (savedDevs) {

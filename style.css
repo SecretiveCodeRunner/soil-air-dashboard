@@ -1655,15 +1655,63 @@ input:checked + .slider:before {
 }
 
 /* ============================================================================
-   PLATFORM-SPECIFIC ADAPTATIONS (WEB DASHBOARD VS NATIVE ANDROID APK)
+   TOP HEADER NAVIGATION & PLATFORM ADAPTATIONS
    ============================================================================ */
 
+/* Desktop Top Header Navigation Bar */
+.top-nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(11, 15, 25, 0.6);
+  padding: 4px 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--panel-border);
+}
+
+.top-nav-bar .nav-item {
+  flex-direction: row;
+  max-width: none;
+  flex: initial;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.top-nav-bar .nav-item i {
+  font-size: 14px;
+}
+
+.top-nav-bar .nav-item.active {
+  background: rgba(0, 242, 254, 0.12);
+  border-color: rgba(0, 242, 254, 0.35);
+  color: #00f2fe;
+  box-shadow: 0 0 12px rgba(0, 242, 254, 0.15);
+}
+
+.top-nav-bar .nav-item:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
 /* 1. Native Mobile App Platform (APK) */
-body.platform-app .web-only-feature {
+body.platform-app .web-only-feature,
+body:not(.platform-web) .web-only-feature {
   display: none !important;
 }
 
 /* 2. Web Platform (https://soil-air-dashboard.pages.dev/) */
+body.platform-web .mobile-only-feature {
+  display: none !important;
+}
+
 body.platform-web .nav-control-tab,
 body.platform-web .nav-settings-tab {
   display: none !important;
@@ -1674,39 +1722,10 @@ body.platform-web #view-settings {
   display: none !important;
 }
 
-/* On Desktop Web: Render clean top header studio navigation */
-body.platform-web .bottom-nav {
-  position: static;
-  height: auto;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-md);
-  padding: 6px 12px;
-  margin-bottom: 18px;
-  justify-content: flex-start;
-  gap: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+body.platform-web {
+  padding-bottom: 24px;
 }
 
-body.platform-web .nav-item {
-  flex-direction: row;
-  max-width: none;
-  flex: initial;
-  padding: 8px 20px;
-  border-radius: var(--radius-sm);
-  font-size: 13.5px;
-  font-weight: 600;
-  gap: 8px;
-  color: var(--text-secondary);
-  transition: all 0.2s ease;
-}
-
-body.platform-web .nav-item.active {
-  background: rgba(0, 242, 254, 0.12);
-  border: 1px solid rgba(0, 242, 254, 0.35);
-  color: #00f2fe;
-  box-shadow: 0 0 12px rgba(0, 242, 254, 0.15);
-}
 
 
 

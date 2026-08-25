@@ -38,6 +38,22 @@
         </div>
       </div>
 
+      <!-- DESKTOP TOP HEADER NAVIGATION TABS -->
+      <nav class="top-nav-bar web-only-feature" id="desktop-top-nav">
+        <button class="nav-item active" data-target="view-metrics">
+          <i class="fa-solid fa-gauge-high"></i>
+          <span>Live Metrics</span>
+        </button>
+        <button class="nav-item" data-target="view-charts">
+          <i class="fa-solid fa-chart-line"></i>
+          <span>Waveforms</span>
+        </button>
+        <button class="nav-item" data-target="view-logs">
+          <i class="fa-solid fa-list-check"></i>
+          <span>History Log</span>
+        </button>
+      </nav>
+
       <div class="header-actions">
         <div class="connection-badge offline" id="connection-status">
           <span class="pulse-dot"></span>
@@ -681,8 +697,8 @@
       <i class="fa-solid fa-file-arrow-down"></i>
     </button>
 
-    <!-- NATIVE 5-BUTTON BOTTOM NAVIGATION BAR -->
-    <nav class="bottom-nav">
+    <!-- NATIVE 5-BUTTON BOTTOM NAVIGATION BAR (Mobile APK Only) -->
+    <nav class="bottom-nav mobile-only-feature">
       <button class="nav-item active" data-target="view-metrics">
         <i class="fa-solid fa-gauge-high"></i>
         <span>Metrics</span>
