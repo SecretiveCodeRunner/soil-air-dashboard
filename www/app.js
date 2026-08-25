@@ -5,7 +5,6 @@ const FIREBASE_API_KEY = "AIzaSyD-E7fj6XtqIysg1MDztO2AfuaBV9an4fY";
 const FIREBASE_USER_EMAIL = "apurbamaity227@gmail.com";
 const FIREBASE_USER_PASSWORD = "Student@12er";
 
-let activeFirebaseSuiteUrl = `${FIREBASE_BASE_URL}SensorData/SoilAirSuite.json`;
 const FIREBASE_AHT_URL = `${FIREBASE_BASE_URL}SensorData/AHT20/History.json`;
 
 // Firebase Authentication State
@@ -70,49 +69,10 @@ async function getFirebaseIdToken() {
 }
 
 // Telemetry State
+
+// Telemetry State
 let rawTelemetryHistory = [];
 let filteredHistory = [];
-
-// ============================================================================
-// RESILIENT FIREBASE POLLING ENGINE
-// ============================================================================
-async function startFirebasePolling() {
-  await fetchTelemetryData();
-  setInterval(fetchTelemetryData, 3000);
-}
-
-async function fetchTelemetryData() {
-  if (isDemoActive) return;
-
-  try {
-    const token = await getFirebaseIdToken();
-    const fetchUrl = token ? `${activeFirebaseSuiteUrl}?auth=${token}` : activeFirebaseSuiteUrl;
-    const res = await fetch(fetchUrl);
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data && !data.error) {
-        processFirebaseData(data);
-        return;
-      }
-    } else {
-      console.warn("Firebase HTTP status:", res.status);
-    }
-
-    if (rawTelemetryHistory.length > 0) {
-      applyTimeFilter();
-    } else {
-      setConnectionState("offline", "Offline • Firebase Cloud Error");
-    }
-  } catch (err) {
-    console.warn("Firebase fetch error, maintaining history view:", err);
-    if (rawTelemetryHistory.length > 0) {
-      applyTimeFilter();
-    } else {
-      setConnectionState("offline", "Offline • Network Connection Error");
-    }
-  }
-}
 
 // Telemetry State
 let activeRangeMode = "24h";
@@ -826,47 +786,125 @@ function initCharts() {
 }
 
 // ============================================================================
-// RESILIENT FIREBASE POLLING ENGINE
+// ULTRA-LOW-BANDWIDTH FIREBASE STREAMING ENGINE
 // ============================================================================
-async function startFirebasePolling() {
-  fetchTelemetryData();
-  setInterval(fetchTelemetryData, 3000);
+let firebasePollingTimer = null;
+let lastKnownLiveTimestamp = null;
+
+function getActiveDeviceBasePath() {
+  const cur = (typeof registeredDevices !== 'undefined') ? (registeredDevices.find(d => d.id === activeDeviceId) || registeredDevices[0]) : null;
+  let p = cur ? cur.path : "SensorData/SoilAirSuite";
+  if (p.endsWith(".json")) p = p.substring(0, p.length - 5);
+  return p;
 }
 
-async function fetchTelemetryData() {
+// 1. Initial Historical Load (Executes ONCE on startup or device switch)
+async function fetchInitialHistory() {
   if (isDemoActive) return;
 
+  const basePath = getActiveDeviceBasePath();
   try {
-    // Attempt direct fetch with existing token or unauthenticated first (unblocks startup)
-    const token = firebaseIdToken;
-    const fetchUrl = token ? `${activeFirebaseSuiteUrl}?auth=${token}` : activeFirebaseSuiteUrl;
-    let res = await fetch(fetchUrl);
+    const token = await getFirebaseIdToken();
+    const authParam = token ? `auth=${token}` : '';
 
-    if (!res.ok) {
-      if (res.status === 401 || res.status === 403) {
-        const newToken = await getFirebaseIdToken();
-        if (newToken) {
-          res = await fetch(`${activeFirebaseSuiteUrl}?auth=${newToken}`);
-        }
+    // Step A: Attempt server-side index query if rules allow it
+    let historyUrl = `${FIREBASE_BASE_URL}${basePath}/History.json?${authParam ? authParam + '&' : ''}orderBy="$key"&limitToLast=50`;
+    let res = await fetch(historyUrl);
+
+    if (!res.ok && (res.status === 401 || res.status === 403)) {
+      const newToken = await getFirebaseIdToken();
+      if (newToken) {
+        historyUrl = `${FIREBASE_BASE_URL}${basePath}/History.json?auth=${newToken}&orderBy="$key"&limitToLast=50`;
+        res = await fetch(historyUrl);
       }
     }
 
     if (res && res.ok) {
       const data = await res.json();
-      if (data && !data.error) {
-        processFirebaseData(data);
+      if (data && !data.error && typeof data === 'object') {
+        const histArray = Object.values(data).filter(v => v && typeof v === 'object');
+        if (histArray.length > 0) {
+          rawTelemetryHistory = histArray;
+          try {
+            localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(rawTelemetryHistory.slice(-200)));
+          } catch (e) {}
+          applyTimeFilter();
+          return;
+        }
+      }
+    }
+
+    // Step B: Robust Unindexed Fallback via shallow keys (~40 KB metadata + parallel fetch of last 40 items)
+    const activeToken = firebaseIdToken || (await getFirebaseIdToken());
+    const shallowUrl = `${FIREBASE_BASE_URL}${basePath}/History.json?${activeToken ? `auth=${activeToken}&` : ''}shallow=true`;
+    const shallowRes = await fetch(shallowUrl);
+
+    if (shallowRes && shallowRes.ok) {
+      const shallowData = await shallowRes.json();
+      if (shallowData && typeof shallowData === 'object') {
+        const keys = Object.keys(shallowData).sort();
+        const recentKeys = keys.slice(-40); // grab the latest 40 pushed points
+
+        const fetchedPoints = await Promise.all(recentKeys.map(async k => {
+          try {
+            const pointRes = await fetch(`${FIREBASE_BASE_URL}${basePath}/History/${k}.json${activeToken ? `?auth=${activeToken}` : ''}`);
+            return pointRes.ok ? await pointRes.json() : null;
+          } catch (e) {
+            return null;
+          }
+        }));
+
+        const validPoints = fetchedPoints.filter(p => p && typeof p === 'object');
+        if (validPoints.length > 0) {
+          rawTelemetryHistory = validPoints;
+          try {
+            localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(rawTelemetryHistory.slice(-200)));
+          } catch (e) {}
+          applyTimeFilter();
+          return;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Initial history fetch fallback, relying on cache and live stream:", err);
+  }
+}
+
+// 2. High-Frequency Live Poller (Polls ONLY /Live.json -> ~300 bytes per request)
+async function fetchTelemetryData() {
+  if (isDemoActive) return;
+
+  const basePath = getActiveDeviceBasePath();
+  try {
+    const token = firebaseIdToken;
+    const authParam = token ? `?auth=${token}` : '';
+    const liveUrl = `${FIREBASE_BASE_URL}${basePath}/Live.json${authParam}`;
+
+    let res = await fetch(liveUrl);
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        const newToken = await getFirebaseIdToken();
+        if (newToken) {
+          res = await fetch(`${FIREBASE_BASE_URL}${basePath}/Live.json?auth=${newToken}`);
+        }
+      }
+    }
+
+    if (res && res.ok) {
+      const livePoint = await res.json();
+      if (livePoint && !livePoint.error && typeof livePoint === 'object') {
+        processLiveReading(livePoint);
         return;
       }
     }
 
-    // Fallback: If network or Firebase returned error
     if (rawTelemetryHistory.length > 0) {
       applyTimeFilter();
     } else {
       setConnectionState("offline", "Offline • Cloud Data Unavailable");
     }
   } catch (err) {
-    console.warn("Firebase fetch error, maintaining history view:", err);
+    console.warn("Live telemetry fetch error:", err);
     if (rawTelemetryHistory.length > 0) {
       applyTimeFilter();
     } else {
@@ -875,71 +913,83 @@ async function fetchTelemetryData() {
   }
 }
 
-function processFirebaseData(data) {
-  if (!data || data.error) {
-    console.warn("Firebase returned error or null:", data?.error);
-    if (rawTelemetryHistory.length === 0) {
-      updateEmptyDeviceState();
-    }
-    return;
+// 3. Process Live Reading and Append
+function processLiveReading(liveRec) {
+  if (!liveRec || typeof liveRec !== 'object') return;
+
+  if (!liveRec.Date || liveRec.Date.startsWith("2000") || liveRec.Date.startsWith("1970")) {
+    liveRec._rawTime = liveRec.Time;
+    liveRec._unsyncedRtc = true;
   }
 
-  let historyList = [];
+  const pointTimestamp = liveRec.Timestamp || liveRec.Time || new Date().toISOString();
 
-  // 1. Check if data contains .History object wrapper
-  if (data.History && typeof data.History === "object") {
-    historyList = Object.values(data.History);
-  } 
-  // 2. Check if data is a direct Array
-  else if (Array.isArray(data)) {
-    historyList = [...data];
-  } 
-  // 3. Check if data is a direct push-ID map: {"-Oz1...": {...}, "-Oz2...": {...}}
-  else if (typeof data === "object") {
-    const vals = Object.values(data).filter(v => v && typeof v === "object");
-    const sample = vals[0];
-    if (sample && (sample.BME_AirTemp_C !== undefined || sample.AirTemp_C !== undefined || sample.AHT_AirTemp_C !== undefined || sample.Timestamp || sample.Time || sample.SoilTemp_C !== undefined)) {
-      historyList = vals;
-    }
+  // Update SD Health badge if provided
+  if (liveRec.SD_Card_Status) {
+    const isEspActive = (lastRecordReceivedTime > 0) && (Date.now() - lastRecordReceivedTime < 45000);
+    updateSdHealthBadge(liveRec.SD_Card_Status, isEspActive);
   }
 
-  // Preserve natural Firebase push order (Firebase push keys are chronologically monotonic)
-  // 4. Append .Live record if present (ALWAYS place at end of array as absolute latest)
-  if (data.Live && typeof data.Live === "object") {
-    const liveRec = { ...data.Live };
-    if (!liveRec.Date || liveRec.Date.startsWith("2000") || liveRec.Date.startsWith("1970")) {
-      liveRec._rawTime = liveRec.Time;
-      liveRec._unsyncedRtc = true;
-    }
-    const lastHistStamp = historyList.length > 0 ? (historyList[historyList.length - 1].Timestamp || historyList[historyList.length - 1].Time) : null;
-    if (!lastHistStamp || lastHistStamp !== (liveRec.Timestamp || liveRec.Time)) {
-      historyList.push(liveRec);
-    }
-    if (data.Live.SD_Card_Status) {
-      const isEspActive = (lastRecordReceivedTime > 0) && (Date.now() - lastRecordReceivedTime < 45000);
-      updateSdHealthBadge(data.Live.SD_Card_Status, isEspActive);
-    }
-  }
+  // Append or update in rawTelemetryHistory
+  const lastIndex = rawTelemetryHistory.length - 1;
+  const lastPoint = lastIndex >= 0 ? rawTelemetryHistory[lastIndex] : null;
+  const lastStamp = lastPoint ? (lastPoint.Timestamp || lastPoint.Time) : null;
 
-  if (historyList.length > 0) {
-    rawTelemetryHistory = historyList;
-    
-    // Save to localStorage cache so mobile app loads instantly on cold start
-    try {
-      localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(historyList.slice(-200)));
-    } catch (e) {}
-
-    const elStatusBox = document.getElementById("active-device-status-box");
-    if (elStatusBox) {
-      elStatusBox.innerHTML = `<span class="badge badge-optimal">ONLINE STREAM</span>`;
+  if (!lastPoint || lastStamp !== pointTimestamp) {
+    rawTelemetryHistory.push(liveRec);
+    // Keep max 300 points in memory so memory/DOM stays lightweight
+    if (rawTelemetryHistory.length > 300) {
+      rawTelemetryHistory.shift();
     }
-    applyTimeFilter();
+    lastKnownLiveTimestamp = pointTimestamp;
   } else {
-    if (rawTelemetryHistory.length === 0) {
-      updateEmptyDeviceState();
-    }
+    rawTelemetryHistory[lastIndex] = liveRec;
   }
+
+  try {
+    localStorage.setItem(`soil_air_cache_${activeDeviceId}`, JSON.stringify(rawTelemetryHistory.slice(-200)));
+  } catch (e) {}
+
+  const elStatusBox = document.getElementById("active-device-status-box");
+  if (elStatusBox) {
+    elStatusBox.innerHTML = `<span class="badge badge-optimal">ONLINE STREAM</span>`;
+  }
+
+  applyTimeFilter();
 }
+
+async function startFirebasePolling() {
+  if (firebasePollingTimer) clearInterval(firebasePollingTimer);
+
+  // A. Initial historical fetch (once)
+  await fetchInitialHistory();
+
+  // B. Initial live poll & actuator sync
+  await fetchTelemetryData();
+  fetchActuatorNodeStatus();
+
+  // C. Polling interval: live is only ~300 bytes
+  let pollInterval = 3500;
+  firebasePollingTimer = setInterval(async () => {
+    // Throttling if tab is hidden to save mobile/laptop battery & data
+    if (document.hidden) return;
+    await fetchTelemetryData();
+  }, pollInterval);
+
+  // Actuator status polling every 10s
+  setInterval(() => {
+    if (!document.hidden) fetchActuatorNodeStatus();
+  }, 10000);
+
+  // Immediate poll when tab becomes active again
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      fetchTelemetryData();
+      fetchActuatorNodeStatus();
+    }
+  });
+}
+
 
 function loadCachedTelemetryData() {
   try {
@@ -1388,17 +1438,46 @@ function applyGraphFilter(filter) {
 }
 
 // ============================================================================
-// BANG-BANG HYSTERESIS CONTROLLER MODULE
+// BANG-BANG HYSTERESIS CONTROLLER & ACTUATION MODULE
 // ============================================================================
 let bangBangConfig = {
   autoIrrigation: true,
   autoFan: true,
   moistOn: 35,
-  moistOff: 75,
+  moistOff: 55,
   tempOn: 32,
-  tempOff: 27,
+  tempOff: 28,
+  humOn: 80,
+  humOff: 68,
+  capWeight: 0.7,
+  resWeight: 0.3,
   relays: { 1: false, 2: false, 3: false, 4: false }
 };
+
+function calculateCompositeMoisture(record) {
+  if (!record) return { composite: 50, cap: "--", res: "--" };
+  const cap = record.CapMoisture_Pct;
+  const res = record.ResMoisture_Pct;
+
+  const validCap = cap !== undefined && cap !== null && !isNaN(cap) && cap >= 0 && cap <= 100;
+  const validRes = res !== undefined && res !== null && !isNaN(res) && res >= 0 && res <= 100;
+
+  let composite = 50;
+  if (validCap && validRes) {
+    // Optimal Composite Formula: 70% Capacitive (stability) + 30% Resistive (rapid dynamic response)
+    composite = Math.round((cap * bangBangConfig.capWeight) + (res * bangBangConfig.resWeight));
+  } else if (validCap) {
+    composite = Math.round(cap);
+  } else if (validRes) {
+    composite = Math.round(res);
+  }
+
+  return {
+    composite: Math.min(100, Math.max(0, composite)),
+    cap: validCap ? `${cap}%` : "--",
+    res: validRes ? `${res}%` : "--"
+  };
+}
 
 function initBangBangControls() {
   const saved = localStorage.getItem("soil_air_bang_bang");
@@ -1415,6 +1494,9 @@ function initBangBangControls() {
   const rngTempOff = document.getElementById("rng-temp-off");
   const dispTempOn = document.getElementById("disp-temp-on");
   const dispTempOff = document.getElementById("disp-temp-off");
+
+  const rngHumOn = document.getElementById("rng-hum-on");
+  const dispHumOn = document.getElementById("disp-hum-on");
 
   const chkIrrigation = document.getElementById("chk-auto-irrigation");
   const chkFan = document.getElementById("chk-auto-fan");
@@ -1459,11 +1541,22 @@ function initBangBangControls() {
     });
   }
 
+  if (rngHumOn) {
+    rngHumOn.value = bangBangConfig.humOn || 80;
+    if (dispHumOn) dispHumOn.textContent = `${bangBangConfig.humOn || 80}%`;
+    rngHumOn.addEventListener("input", (e) => {
+      bangBangConfig.humOn = parseInt(e.target.value, 10);
+      if (dispHumOn) dispHumOn.textContent = `${bangBangConfig.humOn}%`;
+      saveBangBangConfig();
+    });
+  }
+
   if (chkIrrigation) {
     chkIrrigation.checked = bangBangConfig.autoIrrigation;
     chkIrrigation.addEventListener("change", (e) => {
       bangBangConfig.autoIrrigation = e.target.checked;
       saveBangBangConfig();
+      pushRelayStatesToFirebase();
     });
   }
 
@@ -1472,6 +1565,7 @@ function initBangBangControls() {
     chkFan.addEventListener("change", (e) => {
       bangBangConfig.autoFan = e.target.checked;
       saveBangBangConfig();
+      pushRelayStatesToFirebase();
     });
   }
 
@@ -1479,11 +1573,22 @@ function initBangBangControls() {
   const relayBtns = document.querySelectorAll(".btn-toggle-relay");
   relayBtns.forEach(btn => {
     btn.addEventListener("click", () => {
-      const relayId = btn.getAttribute("data-relay");
-      bangBangConfig.relays[relayId] = !bangBangConfig.relays[relayId];
+      const relayId = parseInt(btn.getAttribute("data-relay"), 10);
+      const newState = !bangBangConfig.relays[relayId];
+      bangBangConfig.relays[relayId] = newState;
+
+      // When manually toggling, disable the respective Auto mode so the ESP32 doesn't immediately fight the user
+      if (relayId === 1) {
+        bangBangConfig.autoIrrigation = false;
+        if (chkIrrigation) chkIrrigation.checked = false;
+      } else if (relayId === 2) {
+        bangBangConfig.autoFan = false;
+        if (chkFan) chkFan.checked = false;
+      }
+
       saveBangBangConfig();
       updateRelaysUI();
-      pushRelayStatesToFirebase();
+      pushRelayStatesToFirebase(relayId);
     });
   });
 
@@ -1496,38 +1601,68 @@ function saveBangBangConfig() {
 
 function evaluateBangBangController(latestRecord) {
   if (!latestRecord) return;
-  const moist = latestRecord.CapMoisture_Pct ?? latestRecord.ResMoisture_Pct ?? 50;
+
+  // 1. Compute Composite Soil Moisture (70% Cap + 30% Res)
+  const moistData = calculateCompositeMoisture(latestRecord);
+  const compositeMoist = moistData.composite;
+
+  // Update UI Elements for Composite Moisture
+  const elValComposite = document.getElementById("val-composite-moist");
+  const elDispCap = document.getElementById("disp-cap-val");
+  const elDispRes = document.getElementById("disp-res-val");
+  if (elValComposite) elValComposite.textContent = `${compositeMoist}%`;
+  if (elDispCap) elDispCap.textContent = `Cap ${moistData.cap} (70%)`;
+  if (elDispRes) elDispRes.textContent = `Res ${moistData.res} (30%)`;
+
+  // 2. Compute Mean Canopy Temperature & Humidity
   const temp = latestRecord.BME_AirTemp_C ?? latestRecord.AHT_AirTemp_C ?? latestRecord.AirTemp_C ?? 25;
+  const hum = latestRecord.BME_AirHumidity_Pct ?? latestRecord.AHT_AirHumidity_Pct ?? latestRecord.AirHumidity_Pct ?? 60;
 
   const elValPump = document.getElementById("val-pump-relay");
   const elValFan = document.getElementById("val-fan-relay");
 
-  // Irrigation Hysteresis (ON when moisture <= lower setpoint, OFF when moisture >= upper setpoint)
-  if (bangBangConfig.autoIrrigation) {
-    if (moist <= bangBangConfig.moistOn) {
+  // 3. Ground-Truth Hardware State Sync:
+  // Prioritize the actual physical state reported directly by the ESP32 microcontroller!
+  if (latestRecord.Actuator_Pump !== undefined) {
+    bangBangConfig.relays[1] = (latestRecord.Actuator_Pump === "ON");
+  } else if (bangBangConfig.autoIrrigation) {
+    if (compositeMoist <= bangBangConfig.moistOn) {
       bangBangConfig.relays[1] = true;
-    } else if (moist >= bangBangConfig.moistOff) {
+    } else if (compositeMoist >= bangBangConfig.moistOff) {
       bangBangConfig.relays[1] = false;
     }
   }
 
-  // Cooling Fan Hysteresis (ON when temp >= upper setpoint, OFF when temp <= lower setpoint)
-  if (bangBangConfig.autoFan) {
-    if (temp >= bangBangConfig.tempOn) {
+  // 4. Ventilation & Cooling Fan State Sync
+  if (latestRecord.Actuator_Fan !== undefined) {
+    bangBangConfig.relays[2] = (latestRecord.Actuator_Fan === "ON");
+  } else if (bangBangConfig.autoFan) {
+    const humThresholdOn = bangBangConfig.humOn || 80;
+    const humThresholdOff = bangBangConfig.humOff || 68;
+    if (temp >= bangBangConfig.tempOn || hum >= humThresholdOn) {
       bangBangConfig.relays[2] = true;
-    } else if (temp <= bangBangConfig.tempOff) {
+    } else if (temp <= bangBangConfig.tempOff && hum <= humThresholdOff) {
       bangBangConfig.relays[2] = false;
     }
   }
 
   if (elValPump) {
-    elValPump.textContent = bangBangConfig.relays[1] ? "ON (Irrigating Soil)" : "OFF (Moisture Normal)";
-    elValPump.className = bangBangConfig.relays[1] ? "state-on" : "state-off";
+    const isPumpOn = bangBangConfig.relays[1];
+    elValPump.textContent = isPumpOn ? "ON (Motor / Pump Active)" : "OFF (Motor Idle)";
+    elValPump.className = isPumpOn ? "state-on" : "state-off";
   }
 
   if (elValFan) {
-    elValFan.textContent = bangBangConfig.relays[2] ? "ON (Cooling Active)" : "OFF (Temp Normal)";
-    elValFan.className = bangBangConfig.relays[2] ? "state-on" : "state-off";
+    const isFanOn = bangBangConfig.relays[2];
+    const isHot = temp >= bangBangConfig.tempOn;
+    const isHumid = hum >= (bangBangConfig.humOn || 80);
+    let reason = "Active";
+    if (isHot && isHumid) reason = "Thermal + Humid Active";
+    else if (isHot) reason = "Thermal Cooling Active";
+    else if (isHumid) reason = "Dehumidification Active";
+
+    elValFan.textContent = isFanOn ? `ON (${reason})` : "OFF (Temp & Hum Normal)";
+    elValFan.className = isFanOn ? "state-on" : "state-off";
   }
 
   updateRelaysUI();
@@ -1546,15 +1681,95 @@ function updateRelaysUI() {
   }
 }
 
-async function pushRelayStatesToFirebase() {
+async function pushRelayStatesToFirebase(targetRelayId = null) {
   try {
     const token = await getFirebaseIdToken();
-    const url = `${FIREBASE_BASE_URL}Control/Relays.json${token ? `?auth=${token}` : ''}`;
-    await fetch(url, {
+    const authParam = token ? `?auth=${token}` : '';
+
+    const isAutoActive = (bangBangConfig.autoIrrigation && bangBangConfig.autoFan);
+    const modeStr = (bangBangConfig.autoIrrigation || bangBangConfig.autoFan) ? "AUTO" : "MANUAL";
+
+    // A. Update legacy Relays mapping
+    const relaysUrl = `${FIREBASE_BASE_URL}Control/Relays.json${authParam}`;
+    fetch(relaysUrl, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(bangBangConfig.relays)
+    }).catch(() => {});
+
+    // B. Push structured /Control payload
+    const controlPayload = {
+      Mode: modeStr,
+      Pump: {
+        State: bangBangConfig.relays[1] ? "ON" : "OFF",
+        TriggerSource: bangBangConfig.autoIrrigation ? "AUTO_COMPOSITE_MOISTURE" : "APP_MANUAL_OVERRIDE",
+        DryThreshold_Pct: bangBangConfig.moistOn,
+        WetThreshold_Pct: bangBangConfig.moistOff,
+        LastUpdated: new Date().toISOString()
+      },
+      Fan: {
+        State: bangBangConfig.relays[2] ? "ON" : "OFF",
+        TriggerSource: bangBangConfig.autoFan ? "AUTO_TEMP_HUM" : "APP_MANUAL_OVERRIDE",
+        HighTempThreshold_C: bangBangConfig.tempOn,
+        HighHumThreshold_Pct: bangBangConfig.humOn || 80,
+        LastUpdated: new Date().toISOString()
+      }
+    };
+
+    const ctrlUrl = `${FIREBASE_BASE_URL}Control.json${authParam}`;
+    await fetch(ctrlUrl, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(controlPayload)
     });
+
+    // C. Direct fast path for individual state
+    if (targetRelayId === 1 || targetRelayId === null) {
+      const pumpUrl = `${FIREBASE_BASE_URL}Control/Pump/State.json${authParam}`;
+      fetch(pumpUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bangBangConfig.relays[1] ? "ON" : "OFF")
+      }).catch(() => {});
+    }
+  } catch (e) {
+    console.warn("Relay push to Firebase error:", e);
+  }
+}
+
+async function fetchActuatorNodeStatus() {
+  try {
+    const token = await getFirebaseIdToken();
+    const url = `${FIREBASE_BASE_URL}ActuatorNode.json${token ? `?auth=${token}` : ''}`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const node = await res.json();
+      if (node && node.Status) {
+        const elStatus = document.getElementById("val-actuator-node-status");
+        const pillPump = document.getElementById("pill-actuator-pump");
+        const pillFan = document.getElementById("pill-actuator-fan");
+
+        const isPumpOn = node.PhysicalPumpRelay === "ON";
+        const isFanOn = node.PhysicalFanRelay === "ON";
+
+        bangBangConfig.relays[1] = isPumpOn;
+        bangBangConfig.relays[2] = isFanOn;
+        updateRelaysUI();
+
+        if (elStatus) {
+          const rssi = node.WiFi_RSSI ? ` (${node.WiFi_RSSI} dBm)` : '';
+          elStatus.textContent = `${node.Status}${rssi}`;
+        }
+        if (pillPump) {
+          pillPump.textContent = `Pump: ${isPumpOn ? 'ON' : 'OFF'}`;
+          pillPump.className = `node-pill ${isPumpOn ? 'active' : ''}`;
+        }
+        if (pillFan) {
+          pillFan.textContent = `Fan: ${isFanOn ? 'ON' : 'OFF'}`;
+          pillFan.className = `node-pill ${isFanOn ? 'active' : ''}`;
+        }
+      }
+    }
   } catch (e) {}
 }
 
@@ -1718,16 +1933,12 @@ function renderDevicesList() {
   });
 }
 
-function switchActiveDevice(devId) {
+async function switchActiveDevice(devId) {
   const target = registeredDevices.find(d => d.id === devId);
   if (!target) return;
 
   activeDeviceId = devId;
   localStorage.setItem("soil_air_active_dev_id", activeDeviceId);
-
-  // Update active Firebase URL
-  const cleanPath = target.path.endsWith('.json') ? target.path : `${target.path}.json`;
-  activeFirebaseSuiteUrl = `${FIREBASE_BASE_URL}${cleanPath}`;
 
   updateActiveDeviceBanner();
   renderDevicesList();
@@ -1735,8 +1946,11 @@ function switchActiveDevice(devId) {
   rawTelemetryHistory = [];
   filteredHistory = [];
   loadCachedTelemetryData();
-  fetchTelemetryData();
+  await fetchInitialHistory();
+  await fetchTelemetryData();
+  fetchActuatorNodeStatus();
 }
+
 
 function updateActiveDeviceBanner() {
   const cur = registeredDevices.find(d => d.id === activeDeviceId) || registeredDevices[0];
