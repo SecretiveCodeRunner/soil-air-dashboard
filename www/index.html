@@ -56,6 +56,14 @@
           <i class="fa-solid fa-list-check"></i>
           <span>History Log</span>
         </button>
+        <button class="nav-item" data-target="view-control">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Actuators</span>
+        </button>
+        <button class="nav-item" data-target="view-settings">
+          <i class="fa-solid fa-gear"></i>
+          <span>Settings</span>
+        </button>
       </nav>
 
       <div class="header-actions">
@@ -589,43 +597,97 @@
 
       <!-- MANUAL OVERRIDE RELAY SWITCHES GRID -->
       <section class="manual-relays-section">
-        <h3><i class="fa-solid fa-toggle-on color-press"></i> Manual Actuator & Relay Overrides</h3>
+        <div class="manual-relays-header">
+          <div class="header-text-group">
+            <h3><i class="fa-solid fa-toggle-on color-press"></i> Manual Actuator & Relay Overrides</h3>
+            <span class="subtitle">Direct Hardware Latching • Independent GPIO Controls</span>
+          </div>
+          <div class="master-relays-actions">
+            <button class="btn btn-master-on" id="btn-master-all-on" title="Energize all relays">
+              <i class="fa-solid fa-bolt"></i> ALL ON
+            </button>
+            <button class="btn btn-master-off" id="btn-master-all-off" title="De-energize all relays (Safe Shutoff)">
+              <i class="fa-solid fa-power-off"></i> ALL OFF
+            </button>
+          </div>
+        </div>
+
         <div class="relays-grid">
           
           <div class="relay-card" id="relay-card-1">
-            <div class="relay-icon"><i class="fa-solid fa-faucet-drip"></i></div>
-            <div class="relay-info">
-              <h5>Relay 1: Irrigation Pump</h5>
-              <span class="relay-gpio">GPIO 12 • High Current</span>
+            <div class="relay-card-left">
+              <div class="relay-icon icon-pump"><i class="fa-solid fa-faucet-drip"></i></div>
+              <div class="relay-info">
+                <div class="relay-title-row">
+                  <h5>Relay 1: Water Pump</h5>
+                  <span class="relay-status-pill status-off" id="relay-status-1">OFF</span>
+                </div>
+                <span class="relay-gpio">GPIO 26 • High-Current 12V/220V Motor</span>
+              </div>
             </div>
-            <button class="btn btn-secondary btn-sm btn-toggle-relay" data-relay="1">TOGGLE</button>
+            <div class="relay-card-right">
+              <label class="switch-toggle">
+                <input type="checkbox" class="relay-toggle-input" id="toggle-relay-1" data-relay="1">
+                <span class="slider round"></span>
+              </label>
+            </div>
           </div>
 
           <div class="relay-card" id="relay-card-2">
-            <div class="relay-icon"><i class="fa-solid fa-wind"></i></div>
-            <div class="relay-info">
-              <h5>Relay 2: Exhaust Fan</h5>
-              <span class="relay-gpio">GPIO 13 • 12V PWM</span>
+            <div class="relay-card-left">
+              <div class="relay-icon icon-fan"><i class="fa-solid fa-wind"></i></div>
+              <div class="relay-info">
+                <div class="relay-title-row">
+                  <h5>Relay 2: Exhaust Fan</h5>
+                  <span class="relay-status-pill status-off" id="relay-status-2">OFF</span>
+                </div>
+                <span class="relay-gpio">GPIO 27 • 12V Thermal & Hum Exhaust</span>
+              </div>
             </div>
-            <button class="btn btn-secondary btn-sm btn-toggle-relay" data-relay="2">TOGGLE</button>
+            <div class="relay-card-right">
+              <label class="switch-toggle">
+                <input type="checkbox" class="relay-toggle-input" id="toggle-relay-2" data-relay="2">
+                <span class="slider round"></span>
+              </label>
+            </div>
           </div>
 
           <div class="relay-card" id="relay-card-3">
-            <div class="relay-icon"><i class="fa-solid fa-fire"></i></div>
-            <div class="relay-info">
-              <h5>Relay 3: Heating Element</h5>
-              <span class="relay-gpio">GPIO 14 • Thermal Control</span>
+            <div class="relay-card-left">
+              <div class="relay-icon icon-heat"><i class="fa-solid fa-fire"></i></div>
+              <div class="relay-info">
+                <div class="relay-title-row">
+                  <h5>Relay 3: Heating Element</h5>
+                  <span class="relay-status-pill status-off" id="relay-status-3">OFF</span>
+                </div>
+                <span class="relay-gpio">GPIO 14 • Thermal Canopy Control</span>
+              </div>
             </div>
-            <button class="btn btn-secondary btn-sm btn-toggle-relay" data-relay="3">TOGGLE</button>
+            <div class="relay-card-right">
+              <label class="switch-toggle">
+                <input type="checkbox" class="relay-toggle-input" id="toggle-relay-3" data-relay="3">
+                <span class="slider round"></span>
+              </label>
+            </div>
           </div>
 
           <div class="relay-card" id="relay-card-4">
-            <div class="relay-icon"><i class="fa-solid fa-cloud-rain"></i></div>
-            <div class="relay-info">
-              <h5>Relay 4: Mist Solenoid</h5>
-              <span class="relay-gpio">GPIO 27 • Fogger Valve</span>
+            <div class="relay-card-left">
+              <div class="relay-icon icon-mist"><i class="fa-solid fa-cloud-rain"></i></div>
+              <div class="relay-info">
+                <div class="relay-title-row">
+                  <h5>Relay 4: Mist Solenoid</h5>
+                  <span class="relay-status-pill status-off" id="relay-status-4">OFF</span>
+                </div>
+                <span class="relay-gpio">GPIO 12 • High-Pressure Fogger Valve</span>
+              </div>
             </div>
-            <button class="btn btn-secondary btn-sm btn-toggle-relay" data-relay="4">TOGGLE</button>
+            <div class="relay-card-right">
+              <label class="switch-toggle">
+                <input type="checkbox" class="relay-toggle-input" id="toggle-relay-4" data-relay="4">
+                <span class="slider round"></span>
+              </label>
+            </div>
           </div>
 
         </div>

@@ -304,15 +304,6 @@ document.addEventListener("DOMContentLoaded", () => {
 function initNavigation() {
   if (!isNativeApp) {
     document.body.classList.add("platform-web");
-    const controlTabs = document.querySelectorAll(".nav-control-tab");
-    const settingsTabs = document.querySelectorAll(".nav-settings-tab");
-    controlTabs.forEach(t => t.style.display = "none");
-    settingsTabs.forEach(t => t.style.display = "none");
-
-    const viewControl = document.getElementById("view-control");
-    const viewSettings = document.getElementById("view-settings");
-    if (viewControl) viewControl.style.display = "none";
-    if (viewSettings) viewSettings.style.display = "none";
   } else {
     document.body.classList.add("platform-app");
   }
@@ -323,14 +314,21 @@ function initNavigation() {
   items.forEach(item => {
     item.addEventListener("click", () => {
       const targetId = item.getAttribute("data-target");
+      if (!targetId) return;
       
-      items.forEach(nav => nav.classList.remove("active"));
+      items.forEach(nav => {
+        if (nav.getAttribute("data-target") === targetId) {
+          nav.classList.add("active");
+        } else {
+          nav.classList.remove("active");
+        }
+      });
       panels.forEach(p => p.classList.remove("active"));
 
-      item.classList.add("active");
       const targetPanel = document.getElementById(targetId);
       if (targetPanel) {
         targetPanel.classList.add("active");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     });
   });
@@ -2103,6 +2101,8 @@ let bangBangConfig = {
   relays: { 1: false, 2: false, 3: false, 4: false }
 };
 
+let lastManualRelayActionTime = 0;
+
 function calculateCompositeMoisture(record) {
   if (!record) return { composite: 50, cap: "--", res: "--" };
   const cap = record.CapMoisture_Pct;
@@ -2218,28 +2218,79 @@ function initBangBangControls() {
     });
   }
 
-  // Manual Relay Toggle Buttons
-  const relayBtns = document.querySelectorAll(".btn-toggle-relay");
-  relayBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      const relayId = parseInt(btn.getAttribute("data-relay"), 10);
-      const newState = !bangBangConfig.relays[relayId];
-      bangBangConfig.relays[relayId] = newState;
+  // Individual Relay Card & Switch Click Handlers
+  for (let rId = 1; rId <= 4; rId++) {
+    const relayCard = document.getElementById(`relay-card-${rId}`);
+    const toggleInput = document.getElementById(`toggle-relay-${rId}`);
 
-      // When manually toggling, disable the respective Auto mode so the ESP32 doesn't immediately fight the user
-      if (relayId === 1) {
-        bangBangConfig.autoIrrigation = false;
-        if (chkIrrigation) chkIrrigation.checked = false;
-      } else if (relayId === 2) {
-        bangBangConfig.autoFan = false;
-        if (chkFan) chkFan.checked = false;
+    if (toggleInput) {
+      toggleInput.addEventListener("change", (e) => {
+        bangBangConfig.relays[rId] = e.target.checked;
+        lastManualRelayActionTime = Date.now();
+
+        if (rId === 1) {
+          bangBangConfig.autoIrrigation = false;
+          if (chkIrrigation) chkIrrigation.checked = false;
+        } else if (rId === 2) {
+          bangBangConfig.autoFan = false;
+          if (chkFan) chkFan.checked = false;
+        }
+
+        saveBangBangConfig();
+        updateRelaysUI();
+        pushRelayStatesToFirebase(rId);
+      });
+    }
+
+    if (relayCard) {
+      relayCard.addEventListener("click", (e) => {
+        if (e.target.tagName !== 'INPUT' && !e.target.closest('.switch-toggle')) {
+          if (toggleInput) {
+            toggleInput.checked = !toggleInput.checked;
+            toggleInput.dispatchEvent(new Event('change'));
+          }
+        }
+      });
+    }
+  }
+
+  // Master ALL ON Button
+  const btnMasterAllOn = document.getElementById("btn-master-all-on");
+  if (btnMasterAllOn) {
+    btnMasterAllOn.addEventListener("click", () => {
+      lastManualRelayActionTime = Date.now();
+      for (let i = 1; i <= 4; i++) {
+        bangBangConfig.relays[i] = true;
       }
+      bangBangConfig.autoIrrigation = false;
+      bangBangConfig.autoFan = false;
+      if (chkIrrigation) chkIrrigation.checked = false;
+      if (chkFan) chkFan.checked = false;
 
       saveBangBangConfig();
       updateRelaysUI();
-      pushRelayStatesToFirebase(relayId);
+      pushRelayStatesToFirebase();
     });
-  });
+  }
+
+  // Master ALL OFF Button (Emergency / Safe Shutoff)
+  const btnMasterAllOff = document.getElementById("btn-master-all-off");
+  if (btnMasterAllOff) {
+    btnMasterAllOff.addEventListener("click", () => {
+      lastManualRelayActionTime = Date.now();
+      for (let i = 1; i <= 4; i++) {
+        bangBangConfig.relays[i] = false;
+      }
+      bangBangConfig.autoIrrigation = false;
+      bangBangConfig.autoFan = false;
+      if (chkIrrigation) chkIrrigation.checked = false;
+      if (chkFan) chkFan.checked = false;
+
+      saveBangBangConfig();
+      updateRelaysUI();
+      pushRelayStatesToFirebase();
+    });
+  }
 
   updateRelaysUI();
 }
@@ -2271,27 +2322,31 @@ function evaluateBangBangController(latestRecord) {
   const elValFan = document.getElementById("val-fan-relay");
 
   // 3. Ground-Truth Hardware State Sync:
-  // Prioritize the actual physical state reported directly by the ESP32 microcontroller!
-  if (latestRecord.Actuator_Pump !== undefined) {
-    bangBangConfig.relays[1] = (latestRecord.Actuator_Pump === "ON");
-  } else if (bangBangConfig.autoIrrigation) {
-    if (compositeMoist <= bangBangConfig.moistOn) {
-      bangBangConfig.relays[1] = true;
-    } else if (compositeMoist >= bangBangConfig.moistOff) {
-      bangBangConfig.relays[1] = false;
-    }
-  }
+  // Protect recent user manual actions for 15 seconds
+  const isRecentlyManuallyTriggered = (Date.now() - lastManualRelayActionTime < 15000);
 
-  // 4. Ventilation & Cooling Fan State Sync
-  if (latestRecord.Actuator_Fan !== undefined) {
-    bangBangConfig.relays[2] = (latestRecord.Actuator_Fan === "ON");
-  } else if (bangBangConfig.autoFan) {
-    const humThresholdOn = bangBangConfig.humOn || 80;
-    const humThresholdOff = bangBangConfig.humOff || 68;
-    if (temp >= bangBangConfig.tempOn || hum >= humThresholdOn) {
-      bangBangConfig.relays[2] = true;
-    } else if (temp <= bangBangConfig.tempOff && hum <= humThresholdOff) {
-      bangBangConfig.relays[2] = false;
+  if (!isRecentlyManuallyTriggered) {
+    if (latestRecord.Actuator_Pump !== undefined) {
+      bangBangConfig.relays[1] = (latestRecord.Actuator_Pump === "ON");
+    } else if (bangBangConfig.autoIrrigation) {
+      if (compositeMoist <= bangBangConfig.moistOn) {
+        bangBangConfig.relays[1] = true;
+      } else if (compositeMoist >= bangBangConfig.moistOff) {
+        bangBangConfig.relays[1] = false;
+      }
+    }
+
+    // 4. Ventilation & Cooling Fan State Sync
+    if (latestRecord.Actuator_Fan !== undefined) {
+      bangBangConfig.relays[2] = (latestRecord.Actuator_Fan === "ON");
+    } else if (bangBangConfig.autoFan) {
+      const humThresholdOn = bangBangConfig.humOn || 80;
+      const humThresholdOff = bangBangConfig.humOff || 68;
+      if (temp >= bangBangConfig.tempOn || hum >= humThresholdOn) {
+        bangBangConfig.relays[2] = true;
+      } else if (temp <= bangBangConfig.tempOff && hum <= humThresholdOff) {
+        bangBangConfig.relays[2] = false;
+      }
     }
   }
 
@@ -2320,12 +2375,36 @@ function evaluateBangBangController(latestRecord) {
 function updateRelaysUI() {
   for (let i = 1; i <= 4; i++) {
     const card = document.getElementById(`relay-card-${i}`);
+    const toggleInput = document.getElementById(`toggle-relay-${i}`);
+    const statusPill = document.getElementById(`relay-status-${i}`);
+    const isRelayActive = !!bangBangConfig.relays[i];
+
     if (card) {
-      if (bangBangConfig.relays[i]) {
+      if (isRelayActive) {
         card.classList.add("active-relay");
       } else {
         card.classList.remove("active-relay");
       }
+    }
+    if (toggleInput) {
+      toggleInput.checked = isRelayActive;
+    }
+    if (statusPill) {
+      statusPill.textContent = isRelayActive ? "ACTIVE" : "OFF";
+      statusPill.className = `relay-status-pill ${isRelayActive ? 'status-on' : 'status-off'}`;
+    }
+  }
+
+  // Update header mode banner
+  const elCtrlStatus = document.getElementById("ctrl-mode-status");
+  if (elCtrlStatus) {
+    const isAuto = bangBangConfig.autoIrrigation && bangBangConfig.autoFan;
+    if (isAuto) {
+      elCtrlStatus.innerHTML = '<span class="pulse-dot"></span> AUTO BANG-BANG ACTIVE';
+      elCtrlStatus.className = 'ctrl-status-badge active';
+    } else {
+      elCtrlStatus.innerHTML = '<span class="pulse-dot" style="background: #ff9f0a; box-shadow: 0 0 8px #ff9f0a;"></span> MANUAL OVERRIDE ACTIVE';
+      elCtrlStatus.className = 'ctrl-status-badge manual';
     }
   }
 }
@@ -2335,7 +2414,6 @@ async function pushRelayStatesToFirebase(targetRelayId = null) {
     const token = await getFirebaseIdToken();
     const authParam = token ? `?auth=${token}` : '';
 
-    const isAutoActive = (bangBangConfig.autoIrrigation && bangBangConfig.autoFan);
     const modeStr = (bangBangConfig.autoIrrigation || bangBangConfig.autoFan) ? "AUTO" : "MANUAL";
 
     // A. Update legacy Relays mapping
@@ -2362,6 +2440,16 @@ async function pushRelayStatesToFirebase(targetRelayId = null) {
         HighTempThreshold_C: bangBangConfig.tempOn,
         HighHumThreshold_Pct: bangBangConfig.humOn || 80,
         LastUpdated: new Date().toISOString()
+      },
+      Relay3: {
+        State: bangBangConfig.relays[3] ? "ON" : "OFF",
+        TriggerSource: "APP_MANUAL_OVERRIDE",
+        LastUpdated: new Date().toISOString()
+      },
+      Relay4: {
+        State: bangBangConfig.relays[4] ? "ON" : "OFF",
+        TriggerSource: "APP_MANUAL_OVERRIDE",
+        LastUpdated: new Date().toISOString()
       }
     };
 
@@ -2379,6 +2467,15 @@ async function pushRelayStatesToFirebase(targetRelayId = null) {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(bangBangConfig.relays[1] ? "ON" : "OFF")
+      }).catch(() => {});
+    }
+
+    if (targetRelayId === 2 || targetRelayId === null) {
+      const fanUrl = `${FIREBASE_BASE_URL}Control/Fan/State.json${authParam}`;
+      fetch(fanUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bangBangConfig.relays[2] ? "ON" : "OFF")
       }).catch(() => {});
     }
   } catch (e) {
@@ -2401,9 +2498,12 @@ async function fetchActuatorNodeStatus() {
         const isPumpOn = node.PhysicalPumpRelay === "ON";
         const isFanOn = node.PhysicalFanRelay === "ON";
 
-        bangBangConfig.relays[1] = isPumpOn;
-        bangBangConfig.relays[2] = isFanOn;
-        updateRelaysUI();
+        const isRecentlyManuallyTriggered = (Date.now() - lastManualRelayActionTime < 15000);
+        if (!isRecentlyManuallyTriggered) {
+          bangBangConfig.relays[1] = isPumpOn;
+          bangBangConfig.relays[2] = isFanOn;
+          updateRelaysUI();
+        }
 
         if (elStatus) {
           const rssi = node.WiFi_RSSI ? ` (${node.WiFi_RSSI} dBm)` : '';
