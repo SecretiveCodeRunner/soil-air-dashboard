@@ -65,7 +65,10 @@ body {
   color: var(--text-primary);
   font-family: var(--font-main);
   min-height: 100vh;
-  padding-bottom: 75px;
+  min-height: -webkit-fill-available;
+  padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
   line-height: 1.47059;
   letter-spacing: -0.012em;
   -webkit-font-smoothing: antialiased;
@@ -159,6 +162,8 @@ body.theme-light .active-device-banner {
   max-width: 1240px;
   margin: 0 auto;
   padding: 16px 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 
 /* ============================================================================
@@ -249,6 +254,7 @@ body.theme-light .active-device-banner {
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
   background: var(--panel-bg);
   backdrop-filter: blur(25px) saturate(190%);
   -webkit-backdrop-filter: blur(25px) saturate(190%);
@@ -256,6 +262,8 @@ body.theme-light .active-device-banner {
   border-radius: var(--radius-lg);
   box-shadow: var(--inset-highlight), var(--card-shadow);
   margin-bottom: 16px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .app-brand {
@@ -1036,7 +1044,7 @@ body.theme-light tr:hover td {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 64px;
+  height: calc(64px + env(safe-area-inset-bottom, 0px));
   background: rgba(18, 18, 20, 0.85);
   backdrop-filter: blur(28px) saturate(200%);
   -webkit-backdrop-filter: blur(28px) saturate(200%);
@@ -1046,7 +1054,9 @@ body.theme-light tr:hover td {
   justify-content: space-around;
   align-items: center;
   z-index: 1000;
-  padding: 0 6px;
+  padding: 0 max(6px, env(safe-area-inset-left, 0px)) env(safe-area-inset-bottom, 0px) max(6px, env(safe-area-inset-right, 0px));
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .nav-item {
@@ -1064,10 +1074,14 @@ body.theme-light tr:hover td {
   cursor: pointer;
   flex: 1;
   max-width: 20%;
+  min-height: 48px;
   height: 100%;
   justify-content: center;
   transition: color 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s ease;
-  padding: 4px 0;
+  padding: 6px 0;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .nav-item:active {
@@ -1968,7 +1982,7 @@ body.platform-web {
   .app-header {
     flex-wrap: wrap;
     gap: 10px;
-    padding: 10px 14px;
+    padding: max(10px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) 10px max(14px, env(safe-area-inset-left, 0px));
   }
 
   .app-brand {
