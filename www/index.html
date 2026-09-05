@@ -21,6 +21,9 @@
   <!-- Local Chart.js Engine for Offline Native APK Support -->
   <script src="chart.min.js"></script>
 
+  <!-- Lenis Physics-Based Smooth Scrolling Engine -->
+  <script src="lenis.min.js"></script>
+
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -39,7 +42,7 @@
       </div>
 
       <!-- DESKTOP TOP HEADER NAVIGATION TABS -->
-      <nav class="top-nav-bar web-only-feature" id="desktop-top-nav">
+      <nav class="top-nav-bar web-only-feature" id="desktop-top-nav" data-lenis-prevent>
         <button class="nav-item active" data-target="view-metrics">
           <i class="fa-solid fa-gauge-high"></i>
           <span>Live Metrics</span>
@@ -441,7 +444,7 @@
             </button>
           </div>
           
-          <div class="table-responsive">
+          <div class="table-responsive" data-lenis-prevent>
             <table id="telemetry-table">
               <thead>
                 <tr>
@@ -864,7 +867,7 @@
 
   <!-- INTERACTIVE CSV EXPORT RANGE SELECTION MODAL -->
   <div class="modal-overlay hidden" id="csv-export-modal">
-    <div class="modal-card">
+    <div class="modal-card" data-lenis-prevent>
       <div class="modal-header">
         <h3><i class="fa-solid fa-file-csv color-hum"></i> Download Telemetry CSV Log</h3>
         <button class="modal-close" id="btn-close-csv-modal"><i class="fa-solid fa-xmark"></i></button>

@@ -275,6 +275,7 @@ const viewPanels = document.querySelectorAll(".view-panel");
 // INITIALIZATION
 // ============================================================================
 document.addEventListener("DOMContentLoaded", () => {
+  try { initLenisSmoothScroll(); } catch(e) { console.error("Lenis init error:", e); }
   try { initNavigation(); } catch(e) { console.error("Nav init error:", e); }
   try { initThemeSwitcher(); } catch(e) { console.error("Theme init error:", e); }
   try { initCharts(); } catch(e) { console.error("Chart init error:", e); }
@@ -297,6 +298,30 @@ document.addEventListener("DOMContentLoaded", () => {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
 });
+
+// ============================================================================
+// LENIS PHYSICS-BASED SMOOTH SCROLLING ENGINE
+// ============================================================================
+let appLenis = null;
+
+function initLenisSmoothScroll() {
+  if (typeof Lenis === "undefined") {
+    console.info("Lenis smooth scroll engine not loaded, using native browser scroll.");
+    return;
+  }
+
+  // Configure Lenis with Apple-style smooth exponential deceleration
+  appLenis = new Lenis({
+    autoRaf: true,
+    duration: 1.15,
+    easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+    smoothWheel: true,
+    touchMultiplier: 1.25,
+    infinite: false,
+  });
+
+  window.appLenis = appLenis;
+}
 
 // ============================================================================
 // NATIVE BOTTOM NAVIGATION
@@ -336,7 +361,11 @@ function initNavigation() {
       const targetPanel = document.getElementById(targetId);
       if (targetPanel) {
         targetPanel.classList.add("active");
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (window.appLenis) {
+          window.appLenis.scrollTo(0, { immediate: false });
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
       }
     });
   });
