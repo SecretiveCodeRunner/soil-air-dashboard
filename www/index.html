@@ -56,14 +56,6 @@
           <i class="fa-solid fa-list-check"></i>
           <span>History Log</span>
         </button>
-        <button class="nav-item" data-target="view-control">
-          <i class="fa-solid fa-sliders"></i>
-          <span>Actuators</span>
-        </button>
-        <button class="nav-item" data-target="view-settings">
-          <i class="fa-solid fa-gear"></i>
-          <span>Settings</span>
-        </button>
       </nav>
 
       <div class="header-actions">
@@ -71,6 +63,9 @@
           <span class="pulse-dot"></span>
           <span id="status-text">Checking ESP32...</span>
         </div>
+        <button class="icon-btn" id="btn-toggle-theme" title="Toggle Light / Dark Mode">
+          <i class="fa-solid fa-sun"></i>
+        </button>
         <button class="icon-btn" id="btn-demo-data" title="Toggle Demo Simulation">
           <i class="fa-solid fa-wand-magic-sparkles"></i>
         </button>
@@ -712,7 +707,7 @@
               <i class="fa-solid fa-moon"></i> Dark Theme
             </button>
             <button class="btn btn-secondary btn-theme-select" data-theme="light">
-              <i class="fa-solid fa-sun"></i> Crisp White
+              <i class="fa-solid fa-sun"></i> Light (Apple White)
             </button>
             <button class="btn btn-secondary btn-theme-select" data-theme="system">
               <i class="fa-solid fa-desktop"></i> System Default

@@ -304,6 +304,13 @@ document.addEventListener("DOMContentLoaded", () => {
 function initNavigation() {
   if (!isNativeApp) {
     document.body.classList.add("platform-web");
+    // Strict isolation: Manual Actuator & Relay Overrides and Admin Settings are strictly mobile APK features
+    const forbiddenNav = document.querySelectorAll(".nav-control-tab, .nav-settings-tab");
+    forbiddenNav.forEach(el => el.remove());
+    const viewControl = document.getElementById("view-control");
+    const viewSettings = document.getElementById("view-settings");
+    if (viewControl) viewControl.remove();
+    if (viewSettings) viewSettings.remove();
   } else {
     document.body.classList.add("platform-app");
   }
@@ -315,6 +322,7 @@ function initNavigation() {
     item.addEventListener("click", () => {
       const targetId = item.getAttribute("data-target");
       if (!targetId) return;
+      if (!isNativeApp && (targetId === "view-control" || targetId === "view-settings")) return;
       
       items.forEach(nav => {
         if (nav.getAttribute("data-target") === targetId) {
@@ -759,6 +767,11 @@ function initCharts() {
     return;
   }
 
+  const isLight = document.body.classList.contains("theme-light");
+  const gridColor = isLight ? "rgba(0, 0, 0, 0.06)" : "rgba(255, 255, 255, 0.04)";
+  const tickColor = isLight ? "#6e6e73" : "#64748b";
+  const legendColor = isLight ? "#1d1d1f" : "#cbd5e1";
+
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -778,16 +791,16 @@ function initCharts() {
     },
     scales: {
       x: {
-        grid: { color: "rgba(255, 255, 255, 0.04)" },
-        ticks: { color: "#64748b", font: { family: "JetBrains Mono", size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
+        grid: { color: gridColor },
+        ticks: { color: tickColor, font: { family: "JetBrains Mono", size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
       },
       y: {
-        grid: { color: "rgba(255, 255, 255, 0.04)" },
-        ticks: { color: "#94a3b8", font: { family: "JetBrains Mono", size: 11 } }
+        grid: { color: gridColor },
+        ticks: { color: isLight ? "#6e6e73" : "#94a3b8", font: { family: "JetBrains Mono", size: 11 } }
       }
     },
     plugins: {
-      legend: { labels: { color: "#cbd5e1", font: { family: "Outfit", size: 11 } } }
+      legend: { labels: { color: legendColor, font: { family: "Outfit", size: 11 } } }
     }
   };
 
@@ -2718,6 +2731,16 @@ function initThemeSwitcher() {
   const savedTheme = localStorage.getItem("soil_air_theme") || "dark";
   applyAppTheme(savedTheme);
 
+  // 1. Quick Header Theme Toggle Button
+  const btnToggle = document.getElementById("btn-toggle-theme");
+  if (btnToggle) {
+    btnToggle.addEventListener("click", () => {
+      const isLight = document.body.classList.contains("theme-light");
+      applyAppTheme(isLight ? "dark" : "light");
+    });
+  }
+
+  // 2. Settings Panel Theme Mode Selector
   const themeBtns = document.querySelectorAll(".btn-theme-select");
   themeBtns.forEach(btn => {
     btn.addEventListener("click", () => {
@@ -2732,6 +2755,7 @@ function initThemeSwitcher() {
 function applyAppTheme(themeName) {
   localStorage.setItem("soil_air_theme", themeName);
   const badge = document.getElementById("badge-theme-mode");
+  const btnToggle = document.getElementById("btn-toggle-theme");
 
   const themeBtns = document.querySelectorAll(".btn-theme-select");
   themeBtns.forEach(b => {
@@ -2742,20 +2766,71 @@ function applyAppTheme(themeName) {
     }
   });
 
+  let isLightActive = false;
   if (themeName === "light") {
     document.body.classList.add("theme-light");
-    if (badge) badge.textContent = "Crisp White";
+    isLightActive = true;
+    if (badge) badge.textContent = "Light Theme";
   } else if (themeName === "system") {
     const prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
     if (prefersLight) {
       document.body.classList.add("theme-light");
+      isLightActive = true;
       if (badge) badge.textContent = "System (Light)";
     } else {
       document.body.classList.remove("theme-light");
+      isLightActive = false;
       if (badge) badge.textContent = "System (Dark)";
     }
   } else {
     document.body.classList.remove("theme-light");
+    isLightActive = false;
     if (badge) badge.textContent = "Dark Theme";
   }
+
+  // Update header quick toggle button state
+  if (btnToggle) {
+    if (isLightActive) {
+      btnToggle.innerHTML = '<i class="fa-solid fa-moon"></i>';
+      btnToggle.title = "Switch to Dark Theme";
+    } else {
+      btnToggle.innerHTML = '<i class="fa-solid fa-sun"></i>';
+      btnToggle.title = "Switch to Light (Apple White) Mode";
+    }
+  }
+
+  // Dynamically refresh Chart.js gridlines and labels
+  refreshChartsTheme();
+}
+
+function refreshChartsTheme() {
+  const isLight = document.body.classList.contains("theme-light");
+  const gridColor = isLight ? "rgba(0, 0, 0, 0.06)" : "rgba(255, 255, 255, 0.04)";
+  const tickColor = isLight ? "#6e6e73" : "#64748b";
+  const legendColor = isLight ? "#1d1d1f" : "#cbd5e1";
+
+  const charts = [
+    typeof temperatureChart !== 'undefined' ? temperatureChart : null,
+    typeof humidityChart !== 'undefined' ? humidityChart : null,
+    typeof pressureChart !== 'undefined' ? pressureChart : null,
+    typeof soilMoistureChart !== 'undefined' ? soilMoistureChart : null,
+    typeof soilTempChart !== 'undefined' ? soilTempChart : null
+  ];
+
+  charts.forEach(c => {
+    if (c && c.options && c.options.scales) {
+      if (c.options.scales.x) {
+        if (c.options.scales.x.grid) c.options.scales.x.grid.color = gridColor;
+        if (c.options.scales.x.ticks) c.options.scales.x.ticks.color = tickColor;
+      }
+      if (c.options.scales.y) {
+        if (c.options.scales.y.grid) c.options.scales.y.grid.color = gridColor;
+        if (c.options.scales.y.ticks) c.options.scales.y.ticks.color = isLight ? "#6e6e73" : "#94a3b8";
+      }
+      if (c.options.plugins && c.options.plugins.legend && c.options.plugins.legend.labels) {
+        c.options.plugins.legend.labels.color = legendColor;
+      }
+      try { c.update('none'); } catch(e) {}
+    }
+  });
 }

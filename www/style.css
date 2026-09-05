@@ -77,20 +77,27 @@ body {
 }
 
 /* ============================================================================
-   CRISP APPLE WHITE LIGHT THEME
+/* ============================================================================
+   APPLE DESIGN HIG LIGHT / WHITE THEME
+   Strict adherence to Apple HIG and apple-design skill:
+   Monochromatic base: pure white (#ffffff) or warm paper off-white (#fbfbfd).
+   Subtle secondary elevation: #f5f5f7.
+   High-contrast Apple typography: #1d1d1f primary, #6e6e73 secondary, #86868b muted.
+   Hairline borders: rgba(0, 0, 0, 0.08).
+   Frosted translucent blur panels with Apple multi-layer diffused shadow.
    ============================================================================ */
 body.theme-light {
-  --bg-dark: #f5f5f7;
-  --bg-secondary: #ffffff;
-  --panel-bg: rgba(255, 255, 255, 0.85);
-  --panel-border: rgba(0, 0, 0, 0.07);
-  --panel-hover: rgba(0, 0, 0, 0.04);
-  --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06);
-  --inset-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+  --bg-dark: #ffffff;
+  --bg-secondary: #f5f5f7;
+  --panel-bg: rgba(255, 255, 255, 0.96);
+  --panel-border: rgba(0, 0, 0, 0.08);
+  --panel-hover: rgba(0, 0, 0, 0.03);
+  --card-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.03);
+  --inset-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 1);
 
   --text-primary: #1d1d1f;
-  --text-secondary: #86868b;
-  --text-muted: #a1a1a6;
+  --text-secondary: #6e6e73;
+  --text-muted: #86868b;
 
   --color-accent: #0071e3;
   --color-accent-hover: #0077ed;
@@ -101,18 +108,18 @@ body.theme-light {
   --color-cap: #00c7be;
   --color-res: #0071e3;
 
-  --badge-optimal-bg: rgba(52, 199, 89, 0.12);
-  --badge-optimal-text: #28a745;
-  --badge-normal-bg: rgba(0, 113, 227, 0.1);
+  --badge-optimal-bg: rgba(52, 199, 89, 0.14);
+  --badge-optimal-text: #1b8738;
+  --badge-normal-bg: rgba(0, 113, 227, 0.12);
   --badge-normal-text: #0071e3;
-  --badge-moist-bg: rgba(0, 199, 190, 0.12);
-  --badge-moist-text: #009688;
-  --badge-stale-bg: rgba(255, 149, 0, 0.12);
+  --badge-moist-bg: rgba(0, 199, 190, 0.14);
+  --badge-moist-text: #008276;
+  --badge-stale-bg: rgba(255, 149, 0, 0.14);
   --badge-stale-text: #b26a00;
-  --badge-err-bg: rgba(255, 59, 48, 0.12);
+  --badge-err-bg: rgba(255, 59, 48, 0.14);
   --badge-err-text: #d32f2f;
 
-  background-color: #f5f5f7;
+  background-color: #fbfbfd;
   background-image: none;
   color: #1d1d1f;
 }
@@ -132,7 +139,7 @@ body.theme-light .csv-textarea {
 }
 
 body.theme-light .bottom-nav {
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.9);
   border-top-color: rgba(0, 0, 0, 0.08);
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
 }
@@ -149,13 +156,46 @@ body.theme-light .metric-stats,
 body.theme-light .profile-info-row,
 body.theme-light .relay-state-indicator,
 body.theme-light .range-radio-item {
-  background: #ffffff;
+  background: #f5f5f7;
   border-color: rgba(0, 0, 0, 0.06);
 }
 
 body.theme-light .active-device-banner {
   background: linear-gradient(135deg, rgba(0, 113, 227, 0.06) 0%, rgba(52, 199, 89, 0.04) 100%);
   border-color: rgba(0, 113, 227, 0.2);
+}
+
+body.theme-light .relay-card.active-relay {
+  background: linear-gradient(145deg, rgba(52, 199, 89, 0.09) 0%, rgba(255, 255, 255, 0.98) 100%);
+  border-color: rgba(52, 199, 89, 0.4);
+  box-shadow: 0 8px 28px rgba(52, 199, 89, 0.12), var(--inset-highlight);
+}
+
+body.theme-light .relay-icon {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.06);
+  color: #1d1d1f;
+}
+
+body.theme-light .btn-master-off {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #1d1d1f;
+}
+
+body.theme-light .btn-master-off:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+body.theme-light .icon-btn {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #1d1d1f;
+}
+
+body.theme-light .icon-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #000000;
 }
 
 .app-container {
@@ -2125,7 +2165,13 @@ body.platform-web .mobile-only-feature {
   display: none !important;
 }
 
-/* Control & Settings view panels available across both Web & Native App */
+/* Strict Platform Isolation: Actuator & Relay Controls and Admin Settings are strictly mobile APK features */
+body.platform-web #view-control,
+body.platform-web #view-settings,
+body.platform-web .nav-control-tab,
+body.platform-web .nav-settings-tab {
+  display: none !important;
+}
 
 body.platform-web {
   padding-bottom: 24px;
